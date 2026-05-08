@@ -25,12 +25,24 @@ git commit -m "Descreva a atualizacao"
 git push
 ```
 
+Ou use o script do projeto:
+
+```powershell
+npm.cmd run sync -- -Message "Minha atualizacao"
+```
+
 Se ainda nao houver remoto:
 
 ```powershell
 git remote add origin URL_DO_REPOSITORIO
 git branch -M main
 git push -u origin main
+```
+
+Tambem e possivel conectar o remoto pelo script:
+
+```powershell
+npm.cmd run sync -- -RemoteUrl https://github.com/USUARIO/REPOSITORIO.git -Message "Conectar GitHub"
 ```
 
 ## O que esta implementado

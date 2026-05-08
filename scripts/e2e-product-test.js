@@ -486,9 +486,9 @@ try {
   for (const expected of ['Colaborador IA 24h', 'agentChatForm', 'data-agent-chat-form', 'floating-agent', 'Chat IA suspenso', 'agentDismissedQuestionId', 'data-agent-choice', 'data-agent-autosend', 'requestSubmit', 'resize: both', 'Planejamento e execucao', 'agent_idle_minutes', 'Ativar colaborador IA proativo', 'Agenda semanal de demandas HBR', 'agenda-week-grid', 'Manha', 'Tarde']) {
     assert(frontendText.includes(expected), `Frontend nao contem controle esperado do agente: ${expected}`);
   }
-  assert(appJs.includes("const appVersion = '0.3.1'"), 'Versao visivel do app nao foi atualizada.');
+  assert(appJs.includes("const appVersion = '0.3.2'"), 'Versao visivel do app nao foi atualizada.');
   const version = await request('/api/app-version', { headers: { Cookie: cookie } });
-  assert(version.data.version === '0.3.1', 'Backend nao reportou versao 0.3.1.');
+  assert(version.data.version === '0.3.2', 'Backend nao reportou versao 0.3.2.');
 
   console.log(JSON.stringify({
     status: 'E2E OK',

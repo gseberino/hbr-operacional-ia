@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.1';
+const appVersion = '0.3.2';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
