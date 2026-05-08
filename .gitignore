@@ -1,0 +1,14 @@
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/*test*.sqlite*
+node_modules/
+.env
+.env.*
+*.log
+npm-debug.log*
+coverage/
+dist/
+.cache/
+.DS_Store
+Thumbs.db
