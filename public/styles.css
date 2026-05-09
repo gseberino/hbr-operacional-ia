@@ -1719,6 +1719,34 @@ th,
   border-left-color: var(--accent);
 }
 
+.settings-tabs {
+  margin-bottom: 4px;
+}
+
+.entity-table-band {
+  border-left: 4px solid var(--marine);
+}
+
+.entity-filter-row {
+  margin-bottom: 12px;
+}
+
+.entity-spreadsheet table {
+  min-width: 860px;
+}
+
+.entity-spreadsheet td:first-child,
+.entity-spreadsheet th:first-child {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.entity-spreadsheet th:first-child {
+  background: #eef2f4;
+}
+
 @media (max-width: 980px) {
   .brand {
     display: none;

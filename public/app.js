@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.8';
+const appVersion = '0.3.9';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -34,6 +34,14 @@ const state = {
   agentIdlePromptedAt: 0,
   agentFloatingOpen: false,
   agentDismissedQuestionId: null,
+  settingsTab: 'empresa',
+  aiTab: 'chat',
+  entityFilters: {
+    clients: '',
+    assets: '',
+    projects: '',
+    documents: ''
+  },
   filters: {
     q: '',
     status: '',
@@ -1679,38 +1687,38 @@ function renderDocuments() {
 function renderEntityTable(type, headers, rows) {
   const items = state.data[type];
   if (!items.length) return `<section class="band"><div class="empty">Nenhum registro cadastrado.</div></section>`;
+  const q = normalizeText(state.entityFilters[type] || '');
+  const indexedRows = rows.map((cells, index) => ({ cells, item: items[index] }))
+    .filter(({ cells }) => !q || normalizeText(cells.map(plainCellText).join(' ')).includes(q));
   return `
-    <section class="band">
-      <div class="entity-list">
-        ${rows.map((cells, index) => {
-          const visible = cells.slice(1, 3);
-          const hidden = cells.slice(3);
-          return `
-            <article class="entity-row">
-              <div class="entity-row-main">
-                <div class="entity-title">
-                  <strong>${escapeHtml(cells[0])}</strong>
-                  <span class="muted">${headers[1] ? `${escapeHtml(headers[1])}: ${plainCellText(cells[1]) || '-'}` : ''}</span>
-                </div>
-                <div class="entity-pills">
-                  ${visible.map((cell, cellIndex) => `<span class="pill">${escapeHtml(headers[cellIndex + 1])}: ${plainCellText(cell) || '-'}</span>`).join('')}
-                </div>
-                <div class="actions compact-actions">
-                  <button class="btn small primary" data-edit-${type}="${items[index].id}">Editar</button>
-                </div>
-              </div>
-              <details class="row-details">
-                <summary>Dados do cadastro</summary>
-                <div class="meta-grid">
-                  ${hidden.map((cell, hiddenIndex) => metaItem(headers[hiddenIndex + 3], plainCellText(cell))).join('')}
-                </div>
-                <div class="actions">
-                  <button class="btn small danger" data-delete-${type}="${items[index].id}">Excluir cadastro</button>
-                </div>
-              </details>
-            </article>
-          `;
-        }).join('')}
+    <section class="band entity-table-band">
+      <div class="section-head">
+        <div>
+          <h2>${escapeHtml(labels[type] || type)}</h2>
+          <p>Visualizacao em tabela para consulta rapida, com busca por qualquer coluna.</p>
+        </div>
+        <span class="pill">${indexedRows.length}/${items.length} registro(s)</span>
+      </div>
+      <div class="filter-grid primary-filters entity-filter-row">
+        ${inputField('Buscar na tabela', `${type}_entity_filter`, state.entityFilters[type] || '')}
+      </div>
+      <div class="table-wrap entity-spreadsheet">
+        <table>
+          <thead><tr>${headers.map((item) => `<th>${escapeHtml(item)}</th>`).join('')}<th>Acoes</th></tr></thead>
+          <tbody>
+            ${indexedRows.map(({ cells, item }) => `
+              <tr>
+                ${cells.map((cell, cellIndex) => `<td>${cellIndex === 0 ? `<button class="link-title" type="button" data-edit-${type}="${item.id}">${escapeHtml(plainCellText(cell))}</button>` : cellHtml(cell)}</td>`).join('')}
+                <td>
+                  <div class="actions compact-actions">
+                    <button class="btn small primary" data-edit-${type}="${item.id}">Editar</button>
+                    <button class="btn small danger" data-delete-${type}="${item.id}">Excluir</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('') || `<tr><td colspan="${headers.length + 1}"><div class="empty">Nenhum registro encontrado com este filtro.</div></td></tr>`}
+          </tbody>
+        </table>
       </div>
     </section>
   `;
@@ -2423,8 +2431,14 @@ function renderAi() {
         <div class="metric"><span>Padroes detectados</span><strong>${(proactive.patterns || []).length}</strong><p class="muted">Fluxos sugeridos a partir da repeticao de propostas, follow-ups e materiais.</p></div>
       </div>
     </section>
-    <div class="grid two agent-grid">
-      <section class="band agent-chat">
+    <section class="band" data-tab-scope>
+      <div class="drawer-tabs settings-tabs" data-drawer-tabs>
+        ${aiTabButton('chat', 'Chat operacional')}
+        ${aiTabButton('revisao', 'Revisao e rascunhos')}
+        ${aiTabButton('proatividade', 'Proatividade')}
+        ${aiTabButton('automacoes', 'Automacoes')}
+      </div>
+      <section class="drawer-tab-panel ${state.aiTab === 'chat' ? 'active' : ''}" data-tab-panel="ai-chat">
         <div class="section-head">
           <div>
             <h2>Chat IA operacional</h2>
@@ -2445,26 +2459,35 @@ function renderAi() {
           <button class="btn primary" type="submit">Enviar para IA</button>
         </form>
       </section>
-      <section class="band">
+
+      <section class="drawer-tab-panel ${state.aiTab === 'revisao' ? 'active' : ''}" data-tab-panel="ai-revisao">
+        <div class="grid two">
+          <section class="inline-panel">
+        <div class="section-head"><div><h2>Aguardando revisao</h2><p>Rascunhos e sugestoes que ainda nao executam nada fora do sistema.</p></div></div>
+        ${renderAiList(pending, true)}
+          </section>
+          <section class="inline-panel">
+            <div class="section-head"><h2>Historico da IA</h2></div>
+            ${renderAiList(history, false)}
+          </section>
+        </div>
+      </section>
+
+      <section class="drawer-tab-panel ${state.aiTab === 'proatividade' ? 'active' : ''}" data-tab-panel="ai-proatividade">
         <div class="section-head"><div><h2>Proatividade</h2><p>Avisos e sugestoes que o agente usa para chamar sua atencao quando a rotina esfria.</p></div></div>
         ${renderAgentProactive(proactive)}
       </section>
-    </div>
-    <div class="grid two">
-      <section class="band">
-        <div class="section-head"><div><h2>Aguardando revisao</h2><p>Rascunhos e sugestoes que ainda nao executam nada fora do sistema.</p></div></div>
-        ${renderAiList(pending, true)}
+
+      <section class="drawer-tab-panel ${state.aiTab === 'automacoes' ? 'active' : ''}" data-tab-panel="ai-automacoes">
+        <div class="section-head"><div><h2>Automacoes internas e logs</h2><p>Regras inspiradas no benchmark, executadas sem enviar nada externo.</p></div></div>
+        ${renderAutomationMiniBoard()}
       </section>
-      <section class="band">
-        <div class="section-head"><h2>Historico da IA</h2></div>
-        ${renderAiList(history, false)}
-      </section>
-    </div>
-    <section class="band">
-      <div class="section-head"><div><h2>Automacoes internas e logs</h2><p>Regras inspiradas no benchmark, executadas sem enviar nada externo.</p></div></div>
-      ${renderAutomationMiniBoard()}
     </section>
   `;
+}
+
+function aiTabButton(key, label) {
+  return `<button class="${state.aiTab === key ? 'active' : ''}" type="button" data-tab-target="ai-${key}" data-ai-tab="${key}">${escapeHtml(label)}</button>`;
 }
 
 function renderAutomationMiniBoard() {
@@ -2608,6 +2631,7 @@ function renderAiList(actions, pending) {
 }
 
 function bindAi() {
+  bindDrawerTabs();
   const messagesNode = document.querySelector('#agentMessages');
   if (messagesNode) messagesNode.scrollTop = messagesNode.scrollHeight;
   bindAgentChatControls();
@@ -2739,15 +2763,34 @@ function renderSettings() {
           <p>Configuracoes reais da operacao: perfil da empresa, IA, score, capacidade diaria, campos de entrada e integracoes futuras.</p>
         </div>
       </div>
-      <form id="settingsForm" class="form-grid">
-        <div class="grid two">
-          <section class="settings-panel">
+      <form id="settingsForm" class="form-grid" data-tab-scope>
+        <div class="drawer-tabs settings-tabs" data-drawer-tabs>
+          ${settingsTabButton('empresa', 'Empresa')}
+          ${settingsTabButton('sistema', 'Sistema')}
+          ${settingsTabButton('ia', 'IA')}
+          ${settingsTabButton('integracoes', 'Integracoes')}
+          ${settingsTabButton('benchmark', 'Benchmark')}
+        </div>
+
+        <section class="drawer-tab-panel ${state.settingsTab === 'empresa' ? 'active' : ''}" data-tab-panel="settings-empresa">
+          <div class="grid two">
+            <section class="settings-panel">
             <h3>Empresa</h3>
             ${inputField('Nome da empresa', 'company_name', settings.company_name)}
             ${inputField('Assinatura / slogan', 'brand_tagline', settings.brand_tagline)}
             ${inputField('Responsavel padrao', 'default_responsible', settings.default_responsible)}
-          </section>
-          <section class="settings-panel">
+            </section>
+            <section class="settings-panel">
+              <h3>Equipe e responsaveis</h3>
+              ${textareaField('Responsaveis, tecnicos e operadores', 'responsibles_text', (settings.responsibles || ['HBR']).join('\n'))}
+              <p class="muted">Cada linha vira uma opcao de responsavel nas tarefas e planejamentos.</p>
+            </section>
+          </div>
+        </section>
+
+        <section class="drawer-tab-panel ${state.settingsTab === 'sistema' ? 'active' : ''}" data-tab-panel="settings-sistema">
+          <div class="grid two">
+            <section class="settings-panel">
             <h3>Planejamento</h3>
             <div class="form-grid two">
               ${inputField('Inicio do dia', 'workday_start', settings.workday_start || '08:00', 'time')}
@@ -2762,50 +2805,66 @@ function renderSettings() {
               ${inputField('Meta diaria de tarefas', 'daily_goal_tasks', settings.daily_goal_tasks || 6, 'number')}
               ${inputField('Meta diaria de tempo (min)', 'daily_goal_minutes', settings.daily_goal_minutes || 240, 'number')}
             </div>
+            </section>
+            <section class="settings-panel">
+              <h3>Campos e intake</h3>
+              ${textareaField('Periodos do dia', 'planning_periods_text', (settings.planning_periods || ['manha', 'tarde']).join('\n'))}
+              ${textareaField('Categorias adicionais', 'additional_categories_text', (settings.additional_categories || []).join('\n'))}
+              <p class="muted">Categorias adicionais ficam salvas e prontas para filtros dinamicos.</p>
+            </section>
+          </div>
+          ${renderTemplateSettings()}
+          ${renderCustomFieldsSettings()}
+          ${renderAutomationSettings()}
+        </section>
+
+        <section class="drawer-tab-panel ${state.settingsTab === 'ia' ? 'active' : ''}" data-tab-panel="settings-ia">
+          <section class="settings-panel">
+            <h3>Regras da IA</h3>
+            <div class="form-grid two">
+              ${selectField('Nivel de perguntas na triagem', 'intake_confidence', confidenceOptions, settings.intake_confidence || 'media')}
+              ${textareaField('Notas de status / fluxo', 'custom_status_notes', settings.custom_status_notes || '')}
+            </div>
+            <div class="toggle-grid">
+              ${checkboxField('auto_create_pending_records', 'Criar cadastros pendentes quando nao houver match', settings.auto_create_pending_records)}
+              ${checkboxField('ask_when_missing_client', 'Perguntar quando faltar cliente', settings.ask_when_missing_client)}
+              ${checkboxField('ask_when_missing_due_date', 'Perguntar quando faltar prazo', settings.ask_when_missing_due_date)}
+              ${checkboxField('require_approval_level_2', 'Exigir revisao para acoes nivel 2', settings.require_approval_level_2)}
+              ${checkboxField('require_approval_level_3', 'Exigir aprovacao explicita para nivel 3', settings.require_approval_level_3)}
+              ${checkboxField('agent_enabled', 'Ativar colaborador IA proativo', settings.agent_enabled)}
+              ${checkboxField('agent_autonomous_internal_actions', 'Permitir acoes internas autonomas seguras', settings.agent_autonomous_internal_actions)}
+              ${checkboxField('agent_pattern_detection', 'Detectar padroes e sugerir fluxos automaticos', settings.agent_pattern_detection)}
+            </div>
           </section>
-        </div>
-
-        <section class="settings-panel">
-          <h3>Regras da IA</h3>
-          <div class="form-grid two">
-            ${selectField('Nivel de perguntas na triagem', 'intake_confidence', confidenceOptions, settings.intake_confidence || 'media')}
-            ${textareaField('Notas de status / fluxo', 'custom_status_notes', settings.custom_status_notes || '')}
-          </div>
-          <div class="toggle-grid">
-            ${checkboxField('auto_create_pending_records', 'Criar cadastros pendentes quando nao houver match', settings.auto_create_pending_records)}
-            ${checkboxField('ask_when_missing_client', 'Perguntar quando faltar cliente', settings.ask_when_missing_client)}
-            ${checkboxField('ask_when_missing_due_date', 'Perguntar quando faltar prazo', settings.ask_when_missing_due_date)}
-            ${checkboxField('require_approval_level_2', 'Exigir revisao para acoes nivel 2', settings.require_approval_level_2)}
-            ${checkboxField('require_approval_level_3', 'Exigir aprovacao explicita para nivel 3', settings.require_approval_level_3)}
-            ${checkboxField('agent_enabled', 'Ativar colaborador IA proativo', settings.agent_enabled)}
-            ${checkboxField('agent_autonomous_internal_actions', 'Permitir acoes internas autonomas seguras', settings.agent_autonomous_internal_actions)}
-            ${checkboxField('agent_pattern_detection', 'Detectar padroes e sugerir fluxos automaticos', settings.agent_pattern_detection)}
-          </div>
         </section>
 
-        <section class="settings-panel">
-          <h3>Campos e intake</h3>
-          ${textareaField('Responsaveis', 'responsibles_text', (settings.responsibles || ['HBR']).join('\n'))}
-          ${textareaField('Periodos do dia', 'planning_periods_text', (settings.planning_periods || ['manha', 'tarde']).join('\n'))}
-          ${textareaField('Categorias adicionais', 'additional_categories_text', (settings.additional_categories || []).join('\n'))}
-          <p class="muted">Padrao visto em Asana, ClickUp e Wrike: campos configuraveis ajudam a adaptar a operacao sem alterar codigo. Nesta versao, categorias adicionais ficam salvas e prontas para serem ligadas aos filtros dinamicos.</p>
-        </section>
-
-        <section class="settings-panel">
-          <h3>Integracoes</h3>
-          <div class="form-grid three">
+        <section class="drawer-tab-panel ${state.settingsTab === 'integracoes' ? 'active' : ''}" data-tab-panel="settings-integracoes">
+          <section class="settings-panel">
+            <h3>Integracoes</h3>
+            <p class="muted">Estados reais ou planejados. O app nao simula envio externo quando a integracao ainda nao existe.</p>
+            <div class="form-grid three">
             ${selectField('Google Calendar', 'integration_calendar', integrationStatusOptions, settings.integrations?.calendar || 'planejada')}
             ${selectField('Gmail / E-mail', 'integration_gmail', integrationStatusOptions, settings.integrations?.gmail || 'planejada')}
             ${selectField('Drive / Dropbox', 'integration_drive_dropbox', integrationStatusOptions, settings.integrations?.drive_dropbox || 'planejada')}
             ${selectField('WhatsApp Business', 'integration_whatsapp', integrationStatusOptions, settings.integrations?.whatsapp || 'planejada')}
             ${selectField('Planilhas', 'integration_spreadsheets', integrationStatusOptions, settings.integrations?.spreadsheets || 'planejada')}
             ${selectField('ERP / CRM', 'integration_erp_crm', integrationStatusOptions, settings.integrations?.erp_crm || 'futuro')}
-          </div>
+            </div>
+          </section>
         </section>
 
-        ${renderAutomationSettings()}
-        ${renderTemplateSettings()}
-        ${renderCustomFieldsSettings()}
+        <section class="drawer-tab-panel ${state.settingsTab === 'benchmark' ? 'active' : ''}" data-tab-panel="settings-benchmark">
+          <section class="settings-panel">
+            <h3>Benchmark aplicado</h3>
+            <p class="muted">Itens que mais aparecem em sistemas semelhantes e que viraram configuracoes no app.</p>
+            <div class="grid four">
+              <div class="metric"><span>Campos customizados</span><strong>Alta</strong><p class="muted">Asana, ClickUp, Wrike e Airtable usam campos configuraveis para adaptar fluxo e relatorios.</p></div>
+              <div class="metric"><span>Formularios/intake</span><strong>Alta</strong><p class="muted">Wrike e monday valorizam intake estruturado com perguntas, destino e automacoes.</p></div>
+              <div class="metric"><span>Automacoes</span><strong>Media</strong><p class="muted">ClickUp, Trello, Asana e monday permitem regras, mas aqui seguem controladas por aprovacao.</p></div>
+              <div class="metric"><span>Metas/capacidade</span><strong>Media</strong><p class="muted">Todoist, Motion, Reclaim e Sunsama reforcam metas, capacidade e planejamento diario.</p></div>
+            </div>
+          </section>
+        </section>
 
         <div class="actions">
           <button class="btn primary" type="submit">Salvar configuracoes</button>
@@ -2813,21 +2872,12 @@ function renderSettings() {
         </div>
       </form>
     </section>
-    <section class="band">
-      <div class="section-head">
-        <div>
-          <h2>Benchmark aplicado</h2>
-          <p>Itens que mais aparecem em sistemas semelhantes e que viraram configuracoes no app.</p>
-        </div>
-      </div>
-      <div class="grid four">
-        <div class="metric"><span>Campos customizados</span><strong>Alta</strong><p class="muted">Asana, ClickUp, Wrike e Airtable usam campos configuraveis para adaptar fluxo e relatorios.</p></div>
-        <div class="metric"><span>Formularios/intake</span><strong>Alta</strong><p class="muted">Wrike e monday valorizam intake estruturado com perguntas, destino e automacoes.</p></div>
-        <div class="metric"><span>Automacoes</span><strong>Media</strong><p class="muted">ClickUp, Trello, Asana e monday permitem regras, mas aqui seguem controladas por aprovacao.</p></div>
-        <div class="metric"><span>Metas/capacidade</span><strong>Media</strong><p class="muted">Todoist, Motion, Reclaim e Sunsama reforcam metas, capacidade e planejamento diario.</p></div>
-      </div>
-    </section>
   `;
+}
+
+function settingsTabButton(key, label) {
+  const target = `settings-${key}`;
+  return `<button class="${state.settingsTab === key ? 'active' : ''}" type="button" data-tab-target="${target}" data-settings-tab="${key}">${escapeHtml(label)}</button>`;
 }
 
 function checkboxField(name, label, checked) {
@@ -2924,6 +2974,7 @@ function renderCustomFieldsSettings() {
 }
 
 function bindSettings() {
+  bindDrawerTabs();
   document.querySelector('#resetSettingsView')?.addEventListener('click', async () => {
     await loadAll();
     renderApp();
@@ -3105,6 +3156,10 @@ function openCustomFieldDrawer(item = {}) {
 }
 
 function bindEntityButtons(type, opener) {
+  document.querySelector(`[name="${type}_entity_filter"]`)?.addEventListener('input', (event) => {
+    state.entityFilters[type] = event.target.value;
+    renderApp();
+  });
   document.querySelectorAll(`[data-edit-${type}]`).forEach((button) => {
     button.addEventListener('click', () => opener(state.data[type].find((item) => item.id === Number(button.dataset[`edit${pascal(type)}`]))));
   });
@@ -3270,18 +3325,20 @@ function bindDrawerTabs() {
     tabs.querySelectorAll('[data-tab-target]').forEach((button) => {
       button.addEventListener('click', () => {
         const target = button.dataset.tabTarget;
-        const form = button.closest('form') || document;
+        const form = button.closest('[data-tab-scope]') || button.closest('form') || document;
         tabs.querySelectorAll('[data-tab-target]').forEach((item) => item.classList.toggle('active', item === button));
         form.querySelectorAll('[data-tab-panel]').forEach((panel) => {
           panel.classList.toggle('active', panel.dataset.tabPanel === target);
         });
+        if (button.dataset.settingsTab) state.settingsTab = button.dataset.settingsTab;
+        if (button.dataset.aiTab) state.aiTab = button.dataset.aiTab;
       });
     });
   });
   document.querySelectorAll('[data-tab-jump]').forEach((button) => {
     button.addEventListener('click', () => {
       const target = button.dataset.tabJump;
-      const form = button.closest('form') || document;
+      const form = button.closest('[data-tab-scope]') || button.closest('form') || document;
       form.querySelector(`[data-tab-target="${target}"]`)?.click();
     });
   });
