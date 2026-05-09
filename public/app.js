@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.4';
+const appVersion = '0.3.5';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -3197,59 +3197,131 @@ function closeDrawer() {
   drawer.innerHTML = '';
 }
 
+function bindDrawerTabs() {
+  document.querySelectorAll('[data-drawer-tabs]').forEach((tabs) => {
+    tabs.querySelectorAll('[data-tab-target]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = button.dataset.tabTarget;
+        const form = button.closest('form') || document;
+        tabs.querySelectorAll('[data-tab-target]').forEach((item) => item.classList.toggle('active', item === button));
+        form.querySelectorAll('[data-tab-panel]').forEach((panel) => {
+          panel.classList.toggle('active', panel.dataset.tabPanel === target);
+        });
+      });
+    });
+  });
+}
+
 function openTaskDrawer(item = {}) {
   const timerSeconds = currentTimerSeconds(item);
   const body = `
-    <form class="form-grid">
+    <form class="form-grid task-editor-form">
       <div class="template-strip">
         <span title="Aplica um modelo de preenchimento nos campos operacionais da tarefa. O titulo existente nao e alterado.">Preencher com modelo</span>
         ${availableTaskTemplates().slice(0, 10).map((template) => `
           <button class="btn small" type="button" data-template="${escapeHtml(template.key)}" title="${escapeHtml(template.description || 'Aplicar modelo de preenchimento HBR')}">${escapeHtml(template.name)}</button>
         `).join('')}
       </div>
-      ${inputField('Titulo', 'title', item.title)}
-      ${textareaField('Descricao', 'description', item.description)}
-      <div class="form-grid two">
-        ${selectField('Status', 'status', taskStatuses, item.status || 'triagem')}
-        ${selectField('Prioridade', 'priority', priorities, item.priority || 'media')}
-        ${selectField('Categoria', 'category', categories, item.category || 'cliente')}
-        ${inputField('Prazo', 'due_date', item.due_date, 'date')}
-        ${inputField('Planejar para', 'planned_date', item.planned_date || item.due_date, 'date')}
-        ${selectField('Periodo planejado', 'planned_period', planningPeriodOptions(), item.planned_period || planningPeriod(item))}
-        ${inputField('Follow-up em', 'follow_up_at', (item.follow_up_at || '').slice(0, 10), 'date')}
-        ${inputField('Esforco estimado (min)', 'estimated_minutes', item.estimated_minutes || 30, 'number')}
-        ${selectField('Recorrencia', 'recurrence_rule', recurrenceOptions, item.recurrence_rule || '')}
-        ${inputField('Score operacional', 'operational_score', item.operational_score ?? operationalScoreForTask(item), 'number')}
-        ${inputField('Rank manual', 'rank', item.rank || 0, 'number')}
-        ${inputField('Confianca IA (%)', 'confidence_score', item.confidence_score || 70, 'number')}
-        ${relationSelect('Cliente', 'client_id', clientOptions(item.client_id))}
-        ${relationSelect('Ativo', 'asset_id', assetOptions(item.asset_id))}
-        ${relationSelect('Projeto / OS', 'project_id', projectOptions(item.project_id))}
-        ${inputField('Local / Marina', 'location', item.location)}
-        ${selectField('Responsavel', 'responsible', [['', 'Sem responsavel'], ...responsibleOptions()], item.responsible || '')}
-        ${relationSelect('Bloqueado por tarefa', 'blocked_by', taskOptions(item.blocked_by, item.id))}
-        ${selectField('Tipo de bloqueio', 'blocker_type', blockerTypeOptions(), item.blocker_type || '')}
-        ${inputField('Proxima acao', 'next_action', item.next_action)}
+      <div class="drawer-tabs" data-drawer-tabs>
+        <button class="active" type="button" data-tab-target="task-basic">Essencial</button>
+        <button type="button" data-tab-target="task-priority">Prazo e importancia</button>
+        <button type="button" data-tab-target="task-context">Contexto e bloqueios</button>
+        <button type="button" data-tab-target="task-checklist">Checklist</button>
+        <button type="button" data-tab-target="task-ai">IA e automacao</button>
+        <button type="button" data-tab-target="task-actions">Acoes e historico</button>
       </div>
-      ${textareaField('Resultado esperado', 'expected_result', item.expected_result)}
-      ${textareaField('Dependencias', 'dependency_text', item.dependency_text)}
-      ${textareaField('Bloqueio / risco de execucao', 'blocker_reason', item.blocker_reason)}
-      ${textareaField('Resumo do raciocinio da IA', 'ai_reasoning_summary', item.ai_reasoning_summary || item.reasoning)}
-      ${textareaField('Checklist', 'checklist_text', (item.checklist || []).join('\n'))}
-      ${textareaField('Subtarefas', 'subtasks_text', (item.subtasks || []).join('\n'))}
-      ${item.id ? `
-        <section class="inline-panel">
-          <h3>Acoes da tarefa</h3>
-          <div class="actions">
-            <span class="timer-readout ${item.timer_running ? 'running' : ''}" data-timer-readout="${item.id}">${formatDuration(timerSeconds)}</span>
-            <button class="btn small" data-drawer-timer-start="${item.id}" type="button">${item.timer_running ? 'Continuar timer' : 'Iniciar timer'}</button>
-            <button class="btn small" data-drawer-timer-pause="${item.id}" type="button">Pausar timer</button>
-            <button class="btn small" data-drawer-draft-email="${item.id}" type="button">Criar rascunho de e-mail</button>
-            <button class="btn small" data-drawer-draft-whatsapp="${item.id}" type="button">Criar rascunho de WhatsApp</button>
-          </div>
-        </section>
-      ` : ''}
-      ${item.id ? renderTaskDrawerActivity(item) : ''}
+
+      <section class="drawer-tab-panel active" data-tab-panel="task-basic">
+        <div class="tab-panel-head">
+          <h3>Informacoes essenciais</h3>
+          <p>O minimo para reconhecer a tarefa, vincular ao contexto certo e saber quem cuida dela.</p>
+        </div>
+        ${inputField('Titulo', 'title', item.title)}
+        ${textareaField('Descricao', 'description', item.description)}
+        <div class="form-grid two">
+          ${selectField('Status', 'status', taskStatuses, item.status || 'triagem')}
+          ${selectField('Categoria', 'category', categories, item.category || 'cliente')}
+          ${selectField('Responsavel', 'responsible', [['', 'Sem responsavel'], ...responsibleOptions()], item.responsible || '')}
+          ${inputField('Local / Marina', 'location', item.location)}
+          ${relationSelect('Cliente', 'client_id', clientOptions(item.client_id))}
+          ${relationSelect('Ativo', 'asset_id', assetOptions(item.asset_id))}
+          ${relationSelect('Projeto / OS', 'project_id', projectOptions(item.project_id))}
+        </div>
+      </section>
+
+      <section class="drawer-tab-panel" data-tab-panel="task-priority">
+        <div class="tab-panel-head">
+          <h3>Prazo, importancia e carga</h3>
+          <p>Use esta aba para decidir quando a tarefa deve ser entregue, quando sera executada e qual peso operacional ela tem.</p>
+        </div>
+        <div class="form-grid two">
+          ${selectField('Prioridade', 'priority', priorities, item.priority || 'media')}
+          ${inputField('Prazo final', 'due_date', item.due_date, 'date')}
+          ${inputField('Planejar para', 'planned_date', item.planned_date || item.due_date, 'date')}
+          ${selectField('Periodo planejado', 'planned_period', planningPeriodOptions(), item.planned_period || planningPeriod(item))}
+          ${inputField('Follow-up em', 'follow_up_at', (item.follow_up_at || '').slice(0, 10), 'date')}
+          ${inputField('Esforco estimado (min)', 'estimated_minutes', item.estimated_minutes || 30, 'number')}
+          ${inputField('Score operacional', 'operational_score', item.operational_score ?? operationalScoreForTask(item), 'number')}
+          ${inputField('Rank manual', 'rank', item.rank || 0, 'number')}
+          ${selectField('Recorrencia', 'recurrence_rule', recurrenceOptions, item.recurrence_rule || '')}
+        </div>
+      </section>
+
+      <section class="drawer-tab-panel" data-tab-panel="task-context">
+        <div class="tab-panel-head">
+          <h3>Contexto, resultado e bloqueios</h3>
+          <p>Campos para deixar claro o proximo passo, o resultado esperado e qualquer dependencia que possa travar a execucao.</p>
+        </div>
+        ${inputField('Proxima acao', 'next_action', item.next_action)}
+        ${textareaField('Resultado esperado', 'expected_result', item.expected_result)}
+        ${textareaField('Dependencias', 'dependency_text', item.dependency_text)}
+        <div class="form-grid two">
+          ${relationSelect('Bloqueado por tarefa', 'blocked_by', taskOptions(item.blocked_by, item.id))}
+          ${selectField('Tipo de bloqueio', 'blocker_type', blockerTypeOptions(), item.blocker_type || '')}
+        </div>
+        ${textareaField('Bloqueio / risco de execucao', 'blocker_reason', item.blocker_reason)}
+      </section>
+
+      <section class="drawer-tab-panel" data-tab-panel="task-checklist">
+        <div class="tab-panel-head">
+          <h3>Checklist e subtarefas</h3>
+          <p>Quebre a demanda em passos objetivos para execucao, revisao ou delegacao futura.</p>
+        </div>
+        ${textareaField('Checklist', 'checklist_text', (item.checklist || []).join('\n'))}
+        ${textareaField('Subtarefas', 'subtasks_text', (item.subtasks || []).join('\n'))}
+      </section>
+
+      <section class="drawer-tab-panel" data-tab-panel="task-ai">
+        <div class="tab-panel-head">
+          <h3>IA e automacao</h3>
+          <p>Informacoes usadas pela IA para explicar a classificacao, estimar confianca e preservar rastreabilidade.</p>
+        </div>
+        <div class="form-grid two">
+          ${inputField('Confianca IA (%)', 'confidence_score', item.confidence_score || 70, 'number')}
+        </div>
+        ${textareaField('Resumo do raciocinio da IA', 'ai_reasoning_summary', item.ai_reasoning_summary || item.reasoning)}
+      </section>
+
+      <section class="drawer-tab-panel" data-tab-panel="task-actions">
+        <div class="tab-panel-head">
+          <h3>Acoes e historico</h3>
+          <p>Acoes manuais, rascunhos, timer, comentarios e dependencias ficam separados para nao poluir o preenchimento principal.</p>
+        </div>
+        ${item.id ? `
+          <section class="inline-panel">
+            <h3>Acoes da tarefa</h3>
+            <div class="actions">
+              <span class="timer-readout ${item.timer_running ? 'running' : ''}" data-timer-readout="${item.id}">${formatDuration(timerSeconds)}</span>
+              <button class="btn small" data-drawer-timer-start="${item.id}" type="button">${item.timer_running ? 'Continuar timer' : 'Iniciar timer'}</button>
+              <button class="btn small" data-drawer-timer-pause="${item.id}" type="button">Pausar timer</button>
+              <button class="btn small" data-drawer-draft-email="${item.id}" type="button">Criar rascunho de e-mail</button>
+              <button class="btn small" data-drawer-draft-whatsapp="${item.id}" type="button">Criar rascunho de WhatsApp</button>
+            </div>
+          </section>
+        ` : '<div class="empty">Salve a tarefa para liberar acoes, comentarios e historico.</div>'}
+        ${item.id ? renderTaskDrawerActivity(item) : ''}
+      </section>
+
       <div class="actions">
         <button class="btn primary" type="submit">Salvar</button>
       </div>
@@ -3301,6 +3373,7 @@ function openTaskDrawer(item = {}) {
       toast(error.message);
     }
   });
+  bindDrawerTabs();
   bindTaskTemplates();
   bindTaskDrawerActions();
 }
