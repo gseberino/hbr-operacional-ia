@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.5';
+const appVersion = '0.3.7';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -297,7 +297,7 @@ function renderAuth(needsSetup) {
           ` : ''}
           <div class="field">
             <label>E-mail</label>
-            <input name="email" type="email" autocomplete="email" required>
+            <input name="email" type="text" inputmode="email" autocomplete="email" required>
           </div>
           <div class="field">
             <label>Senha</label>
@@ -630,12 +630,8 @@ function taskMiniList(tasks) {
   if (!tasks?.length) return '<div class="empty">Nenhuma tarefa nesta fila.</div>';
   return `<div class="grid">${tasks.map((task) => `
     <article class="task-card">
-      <button class="link-title" data-open-task="${task.id}" type="button">${escapeHtml(task.title)}</button>
-      <div class="actions">
-        <span class="pill ${task.priority}">${labelFrom(priorities, task.priority)}</span>
-        <span class="pill">${formatDate(task.due_date) || 'Sem prazo'}</span>
-        <span class="pill">Score ${operationalScoreForTask(task)}</span>
-      </div>
+      ${renderTaskCardHeader(task)}
+      ${renderTaskMetaLine(task)}
       ${renderTaskQuickActions(task)}
     </article>
   `).join('')}</div>`;
@@ -705,24 +701,32 @@ function renderDraftTask(task, index) {
       <input type="hidden" name="asset_id" value="${escapeHtml(task.asset_id || '')}">
       <input type="hidden" name="create_pending_client" value="${task.create_pending_client ? 'true' : 'false'}">
       <input type="hidden" name="create_pending_asset" value="${task.create_pending_asset ? 'true' : 'false'}">
-      <div class="form-grid two">
+      <div class="form-grid two compact-edit-grid">
         ${inputField('Titulo', 'title', task.title)}
-        ${selectField('Categoria', 'category', categories, task.category)}
         ${selectField('Prioridade', 'priority', priorities, task.priority)}
         ${selectField('Status', 'status', taskStatuses, task.status)}
         ${inputField('Prazo', 'due_date', task.due_date, 'date')}
         ${inputField('Planejar para', 'planned_date', task.planned_date || task.due_date, 'date')}
+      </div>
+      <details class="detail-block">
+        <summary>Campos complementares</summary>
+        <div class="form-grid two compact-edit-grid">
+          ${selectField('Categoria', 'category', categories, task.category)}
         ${inputField('Esforco estimado (min)', 'estimated_minutes', task.estimated_minutes || 30, 'number')}
         ${inputField('Score operacional', 'operational_score', task.operational_score || 50, 'number')}
         ${inputField('Local / Marina', 'location', task.location)}
         ${inputField('Cliente identificado', 'client_hint', task.client_hint)}
         ${inputField('Ativo identificado', 'asset_hint', task.asset_hint)}
-      </div>
+        </div>
+      </details>
       ${textareaField('Descricao', 'description', task.description)}
-      ${textareaField('Dependencias', 'dependency_text', task.dependency_text || '')}
-      ${textareaField('Bloqueio / risco de execucao', 'blocker_reason', task.blocker_reason || '')}
-      ${textareaField('Checklist', 'checklist_text', (task.checklist || []).join('\n'))}
-      ${textareaField('Subtarefas', 'subtasks_text', (task.subtasks || []).join('\n'))}
+      <details class="detail-block">
+        <summary>Checklist, bloqueios e subtarefas</summary>
+        ${textareaField('Dependencias', 'dependency_text', task.dependency_text || '')}
+        ${textareaField('Bloqueio / risco de execucao', 'blocker_reason', task.blocker_reason || '')}
+        ${textareaField('Checklist', 'checklist_text', (task.checklist || []).join('\n'))}
+        ${textareaField('Subtarefas', 'subtasks_text', (task.subtasks || []).join('\n'))}
+      </details>
       ${textareaField('Correcao ou novo comando para este item', 'correction_text', '')}
     </article>
   `;
@@ -962,28 +966,33 @@ function renderTasks() {
 
 function renderTaskFilters() {
   return `
-    <section class="band">
+    <section class="band filter-band">
       <div class="section-head">
         <div><h2>Filtros</h2><p>As listas, kanbans e PDFs usam exatamente os filtros aplicados aqui.</p></div>
         <button class="btn small" type="button" id="clearTaskFilters">Limpar filtros</button>
       </div>
-      <div class="filter-grid">
+      <div class="filter-grid primary-filters">
         ${inputField('Buscar', 'filter_q', state.filters.q)}
         ${selectField('Status', 'filter_status', [['', 'Todos'], ...taskStatuses], state.filters.status)}
         ${selectField('Prioridade', 'filter_priority', [['', 'Todas'], ...priorities], state.filters.priority)}
-        ${selectField('Categoria', 'filter_category', [['', 'Todas'], ...categories], state.filters.category)}
         ${selectField('Responsavel', 'filter_responsible', [['', 'Todos'], ...responsibleOptions()], state.filters.responsible)}
+      </div>
+      <details class="detail-block filter-details">
+        <summary>Filtros avancados, agrupamentos e views salvas</summary>
+        <div class="filter-grid">
+        ${selectField('Categoria', 'filter_category', [['', 'Todas'], ...categories], state.filters.category)}
         ${relationSelect('Cliente', 'filter_client_id', `<option value="">Todos</option>${state.data.clients.map((item) => `<option value="${item.id}" ${Number(state.filters.client_id) === item.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}`)}
         ${inputField('Prazo de', 'filter_date_from', state.filters.date_from, 'date')}
         ${inputField('Prazo ate', 'filter_date_to', state.filters.date_to, 'date')}
         ${selectField('Kanban', 'filter_kanban_group', [['status', 'Por status'], ['responsible', 'Por responsavel']], state.filters.kanban_group)}
         ${selectField('Central de planejamento', 'filter_planning_view', planningViewOptions(), state.filters.planning_view)}
         ${selectField('View salva', 'filter_saved_view_id', [['', 'Nenhuma'], ...state.data.savedViews.map((view) => [String(view.id), view.name])], state.filters.saved_view_id)}
-      </div>
-      <div class="actions">
-        <button class="btn small" type="button" id="saveCurrentView">Salvar view atual</button>
-        <button class="btn small" type="button" id="deleteCurrentView">Excluir view salva</button>
-      </div>
+        </div>
+        <div class="actions">
+          <button class="btn small" type="button" id="saveCurrentView">Salvar view atual</button>
+          <button class="btn small" type="button" id="deleteCurrentView">Excluir view salva</button>
+        </div>
+      </details>
     </section>
   `;
 }
@@ -1104,14 +1113,8 @@ function planningGroups(tasks, view) {
 function renderPlanningTask(task) {
   return `
     <article class="task-card planning-task">
-      <button class="link-title" data-open-task="${task.id}" type="button">${escapeHtml(task.title)}</button>
-      <p class="muted">${escapeHtml([task.client_name, task.asset_name || task.location].filter(Boolean).join(' / ') || 'Sem vinculo')}</p>
-      <div class="actions">
-        <span class="pill ${task.priority}">${labelFrom(priorities, task.priority)}</span>
-        <span class="pill">${formatDate(taskPlanningDate(task)) || 'Sem data'}</span>
-        <span class="pill">${plannedPeriodLabel(planningPeriod(task))}</span>
-        <span class="pill">Score ${operationalScoreForTask(task)}</span>
-      </div>
+      ${renderTaskCardHeader(task)}
+      ${renderTaskMetaLine(task, { planning: true })}
       ${task.blocker_reason ? `<small class="danger-text">${escapeHtml(task.blocker_reason)}</small>` : ''}
       ${renderTaskQuickActions(task)}
     </article>
@@ -1238,31 +1241,35 @@ function buildTaskInsights(tasks) {
 
 function renderTasksTable(tasks) {
   return `
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Tarefa</th><th>Score</th><th>Status</th><th>Prioridade</th><th>Prazo</th><th>Esforco</th><th>Cliente</th><th>Projeto</th><th>Acoes</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tasks.map((task) => `
-            <tr>
-              <td><button class="link-title" data-open-task="${task.id}" type="button">${escapeHtml(task.title)}</button><br><span class="muted">${escapeHtml(task.next_action || task.category || '')}</span></td>
-              <td><span class="score-badge">${operationalScoreForTask(task)}</span></td>
-              <td><span class="pill">${labelFrom(taskStatuses, task.status)}</span></td>
-              <td><span class="pill ${task.priority}">${labelFrom(priorities, task.priority)}</span></td>
-              <td>${formatDate(task.due_date) || '-'}${task.planned_date ? `<br><span class="muted">Plano: ${formatDate(task.planned_date)}</span>` : ''}</td>
-              <td>${minutesLabel(task.estimated_minutes || 30)}</td>
-              <td>${escapeHtml(task.client_name || '')}</td>
-              <td>${escapeHtml(task.project_name || '')}</td>
-              <td>
-                ${renderTaskQuickActions(task)}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+    <div class="task-row-list">
+      ${tasks.map((task) => `
+        <article class="task-row">
+          <div class="task-row-main">
+            <span class="score-badge">${operationalScoreForTask(task)}</span>
+            <div class="task-row-title">
+              <button class="link-title" data-open-task="${task.id}" type="button">${escapeHtml(task.title)}</button>
+              <span class="muted">${escapeHtml(task.next_action || [task.client_name, task.asset_name || task.location].filter(Boolean).join(' / ') || 'Sem proxima acao')}</span>
+            </div>
+            <div class="task-row-meta">
+              <span class="pill">${labelFrom(taskStatuses, task.status)}</span>
+              <span class="pill ${task.priority}">${labelFrom(priorities, task.priority)}</span>
+              <span class="pill">${formatDate(task.due_date) || 'Sem prazo'}</span>
+            </div>
+            ${renderTaskQuickActions(task)}
+          </div>
+          <details class="row-details">
+            <summary>Mais dados</summary>
+            <div class="meta-grid">
+              ${metaItem('Cliente', task.client_name || 'Sem cliente')}
+              ${metaItem('Projeto', task.project_name || 'Sem projeto')}
+              ${metaItem('Planejado', formatDate(task.planned_date) || 'Sem data')}
+              ${metaItem('Esforco', minutesLabel(task.estimated_minutes || 30))}
+              ${metaItem('Categoria', labelFrom(categories, task.category))}
+              ${metaItem('Local', task.location || 'Sem local')}
+            </div>
+          </details>
+        </article>
+      `).join('')}
     </div>
   `;
 }
@@ -1279,14 +1286,9 @@ function renderKanban(tasks) {
           <h3>${groupedByResponsible ? escapeHtml(lane || 'Sem responsavel') : labelFrom(taskStatuses, lane)}</h3>
           ${tasks.filter((task) => groupedByResponsible ? (task.responsible || 'Sem responsavel') === lane : task.status === lane).map((task) => `
             <article class="task-card kanban-card" draggable="true" data-task-id="${task.id}">
-              <button class="link-title" data-open-task="${task.id}" type="button">${escapeHtml(task.title)}</button>
-              <span class="muted">${escapeHtml(task.client_name || task.location || '')}</span>
-              <div class="actions">
-                <span class="pill ${task.priority}">${labelFrom(priorities, task.priority)}</span>
-                <span class="pill">${formatDate(task.due_date) || 'Sem prazo'}</span>
-                <span class="pill">Score ${operationalScoreForTask(task)}</span>
-              </div>
-              <span class="muted">${minutesLabel(task.estimated_minutes || 30)}${task.blocker_reason ? ` | ${escapeHtml(task.blocker_reason)}` : ''}</span>
+              ${renderTaskCardHeader(task)}
+              ${renderTaskMetaLine(task)}
+              ${task.blocker_reason ? `<small class="danger-text">${escapeHtml(task.blocker_reason)}</small>` : ''}
               ${renderTaskQuickActions(task)}
             </article>
           `).join('') || '<div class="empty">Vazio</div>'}
@@ -1308,6 +1310,32 @@ function renderTaskQuickActions(task) {
       <button class="btn small primary" data-edit-task="${task.id}" type="button">Editar</button>
     </div>
   `;
+}
+
+function renderTaskCardHeader(task) {
+  return `
+    <div class="task-card-head">
+      <button class="link-title" data-open-task="${task.id}" type="button">${escapeHtml(task.title)}</button>
+      <span class="score-badge">${operationalScoreForTask(task)}</span>
+    </div>
+  `;
+}
+
+function renderTaskMetaLine(task, options = {}) {
+  const date = options.planning ? taskPlanningDate(task) : task.due_date;
+  const context = [task.client_name, task.asset_name || task.location].filter(Boolean).join(' / ') || 'Sem vinculo';
+  return `
+    <div class="task-meta-line">
+      <span class="pill ${task.priority}">${labelFrom(priorities, task.priority)}</span>
+      <span class="pill">${formatDate(date) || 'Sem prazo'}</span>
+      ${options.planning ? `<span class="pill">${plannedPeriodLabel(planningPeriod(task))}</span>` : ''}
+      <span class="muted">${escapeHtml(context)}</span>
+    </div>
+  `;
+}
+
+function metaItem(label, value) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '-')}</strong></div>`;
 }
 
 function bindTasks() {
@@ -1653,23 +1681,36 @@ function renderEntityTable(type, headers, rows) {
   if (!items.length) return `<section class="band"><div class="empty">Nenhum registro cadastrado.</div></section>`;
   return `
     <section class="band">
-      <div class="table-wrap">
-        <table>
-          <thead><tr>${headers.map((item) => `<th>${item}</th>`).join('')}<th>Acoes</th></tr></thead>
-          <tbody>
-            ${rows.map((cells, index) => `
-              <tr>
-                ${cells.map((cell, cellIndex) => `<td>${cellIndex === 0 ? `<strong>${escapeHtml(cell)}</strong>` : cellHtml(cell)}</td>`).join('')}
-                <td>
-                  <div class="actions">
-                    <button class="btn small" data-edit-${type}="${items[index].id}">Editar</button>
-                    <button class="btn small danger" data-delete-${type}="${items[index].id}">Excluir</button>
-                  </div>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      <div class="entity-list">
+        ${rows.map((cells, index) => {
+          const visible = cells.slice(1, 3);
+          const hidden = cells.slice(3);
+          return `
+            <article class="entity-row">
+              <div class="entity-row-main">
+                <div class="entity-title">
+                  <strong>${escapeHtml(cells[0])}</strong>
+                  <span class="muted">${headers[1] ? `${escapeHtml(headers[1])}: ${plainCellText(cells[1]) || '-'}` : ''}</span>
+                </div>
+                <div class="entity-pills">
+                  ${visible.map((cell, cellIndex) => `<span class="pill">${escapeHtml(headers[cellIndex + 1])}: ${plainCellText(cell) || '-'}</span>`).join('')}
+                </div>
+                <div class="actions compact-actions">
+                  <button class="btn small primary" data-edit-${type}="${items[index].id}">Editar</button>
+                </div>
+              </div>
+              <details class="row-details">
+                <summary>Dados do cadastro</summary>
+                <div class="meta-grid">
+                  ${hidden.map((cell, hiddenIndex) => metaItem(headers[hiddenIndex + 3], plainCellText(cell))).join('')}
+                </div>
+                <div class="actions">
+                  <button class="btn small danger" data-delete-${type}="${items[index].id}">Excluir cadastro</button>
+                </div>
+              </details>
+            </article>
+          `;
+        }).join('')}
       </div>
     </section>
   `;
@@ -1678,6 +1719,11 @@ function renderEntityTable(type, headers, rows) {
 function cellHtml(cell) {
   if (cell && typeof cell === 'object' && cell.html) return cell.html;
   return escapeHtml(cell || '');
+}
+
+function plainCellText(cell) {
+  if (cell && typeof cell === 'object' && cell.html) return cell.html.replace(/<[^>]+>/g, '').trim();
+  return String(cell || '');
 }
 
 function handleExport(type) {
@@ -3210,17 +3256,28 @@ function bindDrawerTabs() {
       });
     });
   });
+  document.querySelectorAll('[data-tab-jump]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tabJump;
+      const form = button.closest('form') || document;
+      form.querySelector(`[data-tab-target="${target}"]`)?.click();
+    });
+  });
 }
 
 function openTaskDrawer(item = {}) {
   const timerSeconds = currentTimerSeconds(item);
   const body = `
     <form class="form-grid task-editor-form">
-      <div class="template-strip">
-        <span title="Aplica um modelo de preenchimento nos campos operacionais da tarefa. O titulo existente nao e alterado.">Preencher com modelo</span>
-        ${availableTaskTemplates().slice(0, 10).map((template) => `
-          <button class="btn small" type="button" data-template="${escapeHtml(template.key)}" title="${escapeHtml(template.description || 'Aplicar modelo de preenchimento HBR')}">${escapeHtml(template.name)}</button>
-        `).join('')}
+      <div class="template-strip compact-template-strip">
+        <label>
+          <span title="Aplica um modelo de preenchimento nos campos operacionais da tarefa. O titulo existente nao e alterado.">Preencher com modelo</span>
+          <select name="task_template_select" data-template-select>
+            <option value="">Selecionar modelo...</option>
+            ${availableTaskTemplates().slice(0, 20).map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.name)}</option>`).join('')}
+          </select>
+        </label>
+        <small>Use apenas quando quiser preencher campos operacionais com um padrao HBR.</small>
       </div>
       <div class="drawer-tabs" data-drawer-tabs>
         <button class="active" type="button" data-tab-target="task-basic">Essencial</button>
@@ -3234,19 +3291,16 @@ function openTaskDrawer(item = {}) {
       <section class="drawer-tab-panel active" data-tab-panel="task-basic">
         <div class="tab-panel-head">
           <h3>Informacoes essenciais</h3>
-          <p>O minimo para reconhecer a tarefa, vincular ao contexto certo e saber quem cuida dela.</p>
+          <p>O minimo para reconhecer, executar e acompanhar a tarefa no dia a dia.</p>
         </div>
         ${inputField('Titulo', 'title', item.title)}
         ${textareaField('Descricao', 'description', item.description)}
         <div class="form-grid two">
           ${selectField('Status', 'status', taskStatuses, item.status || 'triagem')}
-          ${selectField('Categoria', 'category', categories, item.category || 'cliente')}
           ${selectField('Responsavel', 'responsible', [['', 'Sem responsavel'], ...responsibleOptions()], item.responsible || '')}
-          ${inputField('Local / Marina', 'location', item.location)}
-          ${relationSelect('Cliente', 'client_id', clientOptions(item.client_id))}
-          ${relationSelect('Ativo', 'asset_id', assetOptions(item.asset_id))}
-          ${relationSelect('Projeto / OS', 'project_id', projectOptions(item.project_id))}
         </div>
+        ${inputField('Proxima acao', 'next_action', item.next_action)}
+        ${renderTaskRelationSummary(item)}
       </section>
 
       <section class="drawer-tab-panel" data-tab-panel="task-priority">
@@ -3270,9 +3324,15 @@ function openTaskDrawer(item = {}) {
       <section class="drawer-tab-panel" data-tab-panel="task-context">
         <div class="tab-panel-head">
           <h3>Contexto, resultado e bloqueios</h3>
-          <p>Campos para deixar claro o proximo passo, o resultado esperado e qualquer dependencia que possa travar a execucao.</p>
+          <p>Vinculos e detalhes menos recorrentes ficam aqui para manter a tela principal limpa.</p>
         </div>
-        ${inputField('Proxima acao', 'next_action', item.next_action)}
+        <div class="form-grid two">
+          ${selectField('Categoria', 'category', categories, item.category || 'cliente')}
+          ${inputField('Local / Marina', 'location', item.location)}
+          ${relationSelect('Cliente', 'client_id', clientOptions(item.client_id))}
+          ${relationSelect('Ativo', 'asset_id', assetOptions(item.asset_id))}
+          ${relationSelect('Projeto / OS', 'project_id', projectOptions(item.project_id))}
+        </div>
         ${textareaField('Resultado esperado', 'expected_result', item.expected_result)}
         ${textareaField('Dependencias', 'dependency_text', item.dependency_text)}
         <div class="form-grid two">
@@ -3338,6 +3398,7 @@ function openTaskDrawer(item = {}) {
     const newComment = body.new_comment_text;
     const dependencyNote = body.new_dependency_note;
     const dependencyTask = body.new_dependency_task;
+    delete body.task_template_select;
     delete body.checklist_text;
     delete body.subtasks_text;
     delete body.new_comment_text;
@@ -3376,9 +3437,20 @@ function openTaskDrawer(item = {}) {
   bindDrawerTabs();
   bindTaskTemplates();
   bindTaskDrawerActions();
+  bindTaskRelationActions();
 }
 
 function bindTaskTemplates() {
+  document.querySelectorAll('[data-template-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const template = taskTemplateByKey(select.value);
+      const form = select.closest('form');
+      if (!template || !form) return;
+      applyTaskTemplateToForm(form, template);
+      form.elements.operational_score.value = operationalScoreForTask(formData(form));
+      toast(`Modelo aplicado: ${template.name || template.key}. Revise e clique em Salvar.`);
+    });
+  });
   document.querySelectorAll('[data-template]').forEach((button) => {
     button.addEventListener('click', () => {
       const template = taskTemplateByKey(button.dataset.template);
@@ -3389,6 +3461,66 @@ function bindTaskTemplates() {
       button.closest('.template-strip')?.querySelectorAll('[data-template]').forEach((node) => node.classList.remove('active'));
       button.classList.add('active');
       toast(`Modelo aplicado: ${template.name || template.key}. Revise e clique em Salvar.`);
+    });
+  });
+}
+
+function renderTaskRelationSummary(item = {}) {
+  const client = state.data.clients.find((entry) => entry.id === Number(item.client_id));
+  const asset = state.data.assets.find((entry) => entry.id === Number(item.asset_id));
+  const project = state.data.projects.find((entry) => entry.id === Number(item.project_id));
+  return `
+    <section class="relation-summary">
+      <div class="relation-summary-head">
+        <div>
+          <h3>Resumo dos vinculos</h3>
+          <p>Dados de cliente, ativo e OS ficam recolhidos. Clique no nome para editar o cadastro ou altere os vinculos na aba de contexto.</p>
+        </div>
+        <button class="btn small" type="button" data-tab-jump="task-context">Alterar vinculos</button>
+      </div>
+      <div class="relation-cards">
+        ${relationSummaryCard('Cliente', client?.name || 'Sem cliente vinculado', client ? `data-open-related-client="${client.id}"` : '')}
+        ${relationSummaryCard('Ativo', asset?.name || 'Sem ativo vinculado', asset ? `data-open-related-asset="${asset.id}"` : '')}
+        ${relationSummaryCard('Projeto / OS', project?.name || 'Sem projeto vinculado', project ? `data-open-related-project="${project.id}"` : '')}
+      </div>
+    </section>
+  `;
+}
+
+function relationSummaryCard(label, value, attrs = '') {
+  if (!attrs) {
+    return `
+      <article class="relation-card">
+        <span>${label}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </article>
+    `;
+  }
+  return `
+    <article class="relation-card">
+      <span>${label}</span>
+      <button class="link-title" type="button" ${attrs}>${escapeHtml(value)}</button>
+    </article>
+  `;
+}
+
+function bindTaskRelationActions() {
+  document.querySelectorAll('[data-open-related-client]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const client = state.data.clients.find((entry) => entry.id === Number(button.dataset.openRelatedClient));
+      if (client) openClientDrawer(client);
+    });
+  });
+  document.querySelectorAll('[data-open-related-asset]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const asset = state.data.assets.find((entry) => entry.id === Number(button.dataset.openRelatedAsset));
+      if (asset) openAssetDrawer(asset);
+    });
+  });
+  document.querySelectorAll('[data-open-related-project]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const project = state.data.projects.find((entry) => entry.id === Number(button.dataset.openRelatedProject));
+      if (project) openProjectDrawer(project);
     });
   });
 }
