@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.9';
+const appVersion = '0.3.10';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -35,6 +35,8 @@ const state = {
   agentFloatingOpen: false,
   agentDismissedQuestionId: null,
   settingsTab: 'empresa',
+  settingsSystemTab: 'planejamento',
+  taskTab: 'planejamento',
   aiTab: 'chat',
   entityFilters: {
     clients: '',
@@ -485,16 +487,21 @@ function subtitle() {
 
 function topActions() {
   if (state.view === 'tasks') {
-    return [
-      '<button class="btn primary" data-action="new-task">Nova tarefa</button>',
-      '<button class="btn" data-export="tasks-text">Copiar p/ grupo</button>',
-      '<button class="btn" data-export="tasks-report">Copiar relatorio</button>',
-      '<button class="btn" data-export="tasks-operational-pdf">Relatorio PDF</button>',
-      '<button class="btn" data-export="tasks-agenda">Agenda PDF</button>',
-      '<button class="btn" data-export="tasks-kanban">Kanban PDF</button>',
-      '<button class="btn" data-export="csv">CSV</button>',
-      '<button class="btn" data-export="json">JSON</button>'
-    ].join('');
+    return `
+      <button class="btn primary" data-action="new-task">Nova tarefa</button>
+      <details class="top-action-menu">
+        <summary class="btn">Mais acoes</summary>
+        <div>
+          <button class="btn small" data-export="tasks-text">Copiar p/ grupo</button>
+          <button class="btn small" data-export="tasks-report">Copiar relatorio</button>
+          <button class="btn small" data-export="tasks-operational-pdf">Relatorio PDF</button>
+          <button class="btn small" data-export="tasks-agenda">Agenda PDF</button>
+          <button class="btn small" data-export="tasks-kanban">Kanban PDF</button>
+          <button class="btn small" data-export="csv">CSV</button>
+          <button class="btn small" data-export="json">JSON</button>
+        </div>
+      </details>
+    `;
   }
   if (state.view === 'clients') return '<button class="btn primary" data-action="new-client">Novo cliente</button>' + exportButtons();
   if (state.view === 'assets') return '<button class="btn primary" data-action="new-asset">Novo ativo</button>' + exportButtons();
@@ -956,20 +963,42 @@ function renderTasks() {
   const tasks = sortedTasks({ includeDone: true, tasks: filteredTasks() });
   return `
     ${renderTaskFilters()}
-    ${renderPlanningCenter(tasks)}
-    ${renderTaskInsights(tasks)}
-    ${renderDailyPlan(tasks)}
-    <section class="band">
+    <section class="band task-workspace" data-tab-scope>
       <div class="section-head">
-        <div><h2>Lista priorizada</h2><p>Ordenada por score operacional, prazo, impacto e bloqueios.</p></div>
+        <div><h2>Area de trabalho</h2><p>Escolha uma leitura por vez para reduzir ruido visual sem perder profundidade.</p></div>
       </div>
-      ${tasks.length ? renderTasksTable(tasks) : '<div class="empty">Nenhuma tarefa cadastrada ainda.</div>'}
-    </section>
-    <section class="band">
-      <div class="section-head"><h2>Kanban operacional</h2></div>
-      ${renderKanban(tasks)}
+      <div class="drawer-tabs task-tabs" data-drawer-tabs>
+        ${taskTabButton('planejamento', 'Central de planejamento')}
+        ${taskTabButton('analise', 'Analise operacional')}
+        ${taskTabButton('dia', 'Plano do dia')}
+        ${taskTabButton('lista', 'Lista priorizada')}
+        ${taskTabButton('kanban', 'Kanban operacional')}
+      </div>
+      <section class="drawer-tab-panel ${state.taskTab === 'planejamento' ? 'active' : ''}" data-tab-panel="tasks-planejamento">
+        ${renderPlanningCenter(tasks)}
+      </section>
+      <section class="drawer-tab-panel ${state.taskTab === 'analise' ? 'active' : ''}" data-tab-panel="tasks-analise">
+        ${renderTaskInsights(tasks)}
+      </section>
+      <section class="drawer-tab-panel ${state.taskTab === 'dia' ? 'active' : ''}" data-tab-panel="tasks-dia">
+        ${renderDailyPlan(tasks)}
+      </section>
+      <section class="drawer-tab-panel ${state.taskTab === 'lista' ? 'active' : ''}" data-tab-panel="tasks-lista">
+        <div class="section-head">
+          <div><h2>Lista priorizada</h2><p>Ordenada por score operacional, prazo, impacto e bloqueios.</p></div>
+        </div>
+        ${tasks.length ? renderTasksTable(tasks) : '<div class="empty">Nenhuma tarefa cadastrada ainda.</div>'}
+      </section>
+      <section class="drawer-tab-panel ${state.taskTab === 'kanban' ? 'active' : ''}" data-tab-panel="tasks-kanban">
+        <div class="section-head"><h2>Kanban operacional</h2></div>
+        ${renderKanban(tasks)}
+      </section>
     </section>
   `;
+}
+
+function taskTabButton(key, label) {
+  return `<button class="${state.taskTab === key ? 'active' : ''}" type="button" data-tab-target="tasks-${key}" data-task-tab="${key}">${escapeHtml(label)}</button>`;
 }
 
 function renderTaskFilters() {
@@ -1347,6 +1376,7 @@ function metaItem(label, value) {
 }
 
 function bindTasks() {
+  bindDrawerTabs();
   bindTaskFilters();
   bindKanbanDragAndDrop();
 }
@@ -2753,7 +2783,7 @@ function notifyUser(title, body) {
   }
 }
 
-function renderSettings() {
+function legacyRenderSettingsUnused() {
   const settings = state.data.settings || {};
   return `
     <section class="band">
@@ -2878,6 +2908,142 @@ function renderSettings() {
 function settingsTabButton(key, label) {
   const target = `settings-${key}`;
   return `<button class="${state.settingsTab === key ? 'active' : ''}" type="button" data-tab-target="${target}" data-settings-tab="${key}">${escapeHtml(label)}</button>`;
+}
+
+function systemTabButton(key, label) {
+  return `<button class="${state.settingsSystemTab === key ? 'active' : ''}" type="button" data-tab-target="system-${key}" data-settings-system-tab="${key}">${escapeHtml(label)}</button>`;
+}
+
+function renderSystemSettingsTabs(settings) {
+  return `
+    <div class="system-subtabs" data-tab-scope>
+      <div class="drawer-tabs settings-tabs" data-drawer-tabs>
+        ${systemTabButton('planejamento', 'Planejamento')}
+        ${systemTabButton('intake', 'Campos e intake')}
+        ${systemTabButton('modelos', 'Modelos')}
+        ${systemTabButton('customizados', 'Campos customizados')}
+        ${systemTabButton('automacoes', 'Automacoes')}
+      </div>
+      <section class="drawer-tab-panel ${state.settingsSystemTab === 'planejamento' ? 'active' : ''}" data-tab-panel="system-planejamento">
+        <section class="settings-panel">
+          <h3>Planejamento</h3>
+          <div class="form-grid two">
+            ${inputField('Inicio do dia', 'workday_start', settings.workday_start || '08:00', 'time')}
+            ${inputField('Fim do dia', 'workday_end', settings.workday_end || '18:00', 'time')}
+            ${inputField('Capacidade diaria (min)', 'daily_capacity_minutes', settings.daily_capacity_minutes || 360, 'number')}
+            ${inputField('Esforco padrao (min)', 'default_estimated_minutes', settings.default_estimated_minutes || 30, 'number')}
+            ${inputField('Passo do esforÃ§o (min)', 'effort_step_minutes', settings.effort_step_minutes || 5, 'number')}
+            ${inputField('Conferir timer a cada (min)', 'timer_check_minutes', settings.timer_check_minutes || 5, 'number')}
+            ${inputField('IA pergunta apos inatividade (min)', 'agent_idle_minutes', settings.agent_idle_minutes || 20, 'number')}
+            ${inputField('IA revisa lembretes a cada (min)', 'agent_reminder_minutes', settings.agent_reminder_minutes || 30, 'number')}
+            ${inputField('Passo do score', 'score_step', settings.score_step || 1, 'number')}
+            ${inputField('Meta diaria de tarefas', 'daily_goal_tasks', settings.daily_goal_tasks || 6, 'number')}
+            ${inputField('Meta diaria de tempo (min)', 'daily_goal_minutes', settings.daily_goal_minutes || 240, 'number')}
+          </div>
+        </section>
+      </section>
+      <section class="drawer-tab-panel ${state.settingsSystemTab === 'intake' ? 'active' : ''}" data-tab-panel="system-intake">
+        <section class="settings-panel">
+          <h3>Campos e intake</h3>
+          ${textareaField('Periodos do dia', 'planning_periods_text', (settings.planning_periods || ['manha', 'tarde']).join('\n'))}
+          ${textareaField('Categorias adicionais', 'additional_categories_text', (settings.additional_categories || []).join('\n'))}
+          <p class="muted">Categorias adicionais ficam salvas e prontas para filtros dinamicos.</p>
+        </section>
+      </section>
+      <section class="drawer-tab-panel ${state.settingsSystemTab === 'modelos' ? 'active' : ''}" data-tab-panel="system-modelos">${renderTemplateSettings()}</section>
+      <section class="drawer-tab-panel ${state.settingsSystemTab === 'customizados' ? 'active' : ''}" data-tab-panel="system-customizados">${renderCustomFieldsSettings()}</section>
+      <section class="drawer-tab-panel ${state.settingsSystemTab === 'automacoes' ? 'active' : ''}" data-tab-panel="system-automacoes">${renderAutomationSettings()}</section>
+    </div>
+  `;
+}
+
+function renderSettings() {
+  const settings = state.data.settings || {};
+  return `
+    <section class="band">
+      <div class="section-head">
+        <div>
+          <h2>Versao ${appVersion}</h2>
+          <p>Configuracoes organizadas por assunto para manter a manutencao do sistema mais tranquila.</p>
+        </div>
+      </div>
+      <form id="settingsForm" class="form-grid" data-tab-scope>
+        <div class="drawer-tabs settings-tabs" data-drawer-tabs>
+          ${settingsTabButton('empresa', 'Empresa')}
+          ${settingsTabButton('sistema', 'Sistema')}
+          ${settingsTabButton('ia', 'IA')}
+          ${settingsTabButton('integracoes', 'Integracoes')}
+          ${settingsTabButton('benchmark', 'Benchmark')}
+        </div>
+        <section class="drawer-tab-panel ${state.settingsTab === 'empresa' ? 'active' : ''}" data-tab-panel="settings-empresa">
+          <div class="grid two">
+            <section class="settings-panel">
+              <h3>Empresa</h3>
+              ${inputField('Nome da empresa', 'company_name', settings.company_name)}
+              ${inputField('Assinatura / slogan', 'brand_tagline', settings.brand_tagline)}
+              ${inputField('Responsavel padrao', 'default_responsible', settings.default_responsible)}
+            </section>
+            <section class="settings-panel">
+              <h3>Equipe e responsaveis</h3>
+              ${textareaField('Responsaveis, tecnicos e operadores', 'responsibles_text', (settings.responsibles || ['HBR']).join('\n'))}
+              <p class="muted">Cada linha vira uma opcao de responsavel nas tarefas e planejamentos.</p>
+            </section>
+          </div>
+        </section>
+        <section class="drawer-tab-panel ${state.settingsTab === 'sistema' ? 'active' : ''}" data-tab-panel="settings-sistema">
+          ${renderSystemSettingsTabs(settings)}
+        </section>
+        <section class="drawer-tab-panel ${state.settingsTab === 'ia' ? 'active' : ''}" data-tab-panel="settings-ia">
+          <section class="settings-panel">
+            <h3>Regras da IA</h3>
+            <div class="form-grid two">
+              ${selectField('Nivel de perguntas na triagem', 'intake_confidence', confidenceOptions, settings.intake_confidence || 'media')}
+              ${textareaField('Notas de status / fluxo', 'custom_status_notes', settings.custom_status_notes || '')}
+            </div>
+            <div class="toggle-grid">
+              ${checkboxField('auto_create_pending_records', 'Criar cadastros pendentes quando nao houver match', settings.auto_create_pending_records)}
+              ${checkboxField('ask_when_missing_client', 'Perguntar quando faltar cliente', settings.ask_when_missing_client)}
+              ${checkboxField('ask_when_missing_due_date', 'Perguntar quando faltar prazo', settings.ask_when_missing_due_date)}
+              ${checkboxField('require_approval_level_2', 'Exigir revisao para acoes nivel 2', settings.require_approval_level_2)}
+              ${checkboxField('require_approval_level_3', 'Exigir aprovacao explicita para nivel 3', settings.require_approval_level_3)}
+              ${checkboxField('agent_enabled', 'Ativar colaborador IA proativo', settings.agent_enabled)}
+              ${checkboxField('agent_autonomous_internal_actions', 'Permitir acoes internas autonomas seguras', settings.agent_autonomous_internal_actions)}
+              ${checkboxField('agent_pattern_detection', 'Detectar padroes e sugerir fluxos automaticos', settings.agent_pattern_detection)}
+            </div>
+          </section>
+        </section>
+        <section class="drawer-tab-panel ${state.settingsTab === 'integracoes' ? 'active' : ''}" data-tab-panel="settings-integracoes">
+          <section class="settings-panel">
+            <h3>Integracoes</h3>
+            <p class="muted">Estados reais ou planejados. O app nao simula envio externo quando a integracao ainda nao existe.</p>
+            <div class="form-grid three">
+              ${selectField('Google Calendar', 'integration_calendar', integrationStatusOptions, settings.integrations?.calendar || 'planejada')}
+              ${selectField('Gmail / E-mail', 'integration_gmail', integrationStatusOptions, settings.integrations?.gmail || 'planejada')}
+              ${selectField('Drive / Dropbox', 'integration_drive_dropbox', integrationStatusOptions, settings.integrations?.drive_dropbox || 'planejada')}
+              ${selectField('WhatsApp Business', 'integration_whatsapp', integrationStatusOptions, settings.integrations?.whatsapp || 'planejada')}
+              ${selectField('Planilhas', 'integration_spreadsheets', integrationStatusOptions, settings.integrations?.spreadsheets || 'planejada')}
+              ${selectField('ERP / CRM', 'integration_erp_crm', integrationStatusOptions, settings.integrations?.erp_crm || 'futuro')}
+            </div>
+          </section>
+        </section>
+        <section class="drawer-tab-panel ${state.settingsTab === 'benchmark' ? 'active' : ''}" data-tab-panel="settings-benchmark">
+          <section class="settings-panel">
+            <h3>Benchmark aplicado</h3>
+            <div class="grid four">
+              <div class="metric"><span>Campos customizados</span><strong>Alta</strong><p class="muted">Asana, ClickUp, Wrike e Airtable usam campos configuraveis para adaptar fluxo e relatorios.</p></div>
+              <div class="metric"><span>Formularios/intake</span><strong>Alta</strong><p class="muted">Wrike e monday valorizam intake estruturado com perguntas, destino e automacoes.</p></div>
+              <div class="metric"><span>Automacoes</span><strong>Media</strong><p class="muted">ClickUp, Trello, Asana e monday permitem regras, mas aqui seguem controladas por aprovacao.</p></div>
+              <div class="metric"><span>Metas/capacidade</span><strong>Media</strong><p class="muted">Todoist, Motion, Reclaim e Sunsama reforcam metas, capacidade e planejamento diario.</p></div>
+            </div>
+          </section>
+        </section>
+        <div class="actions">
+          <button class="btn primary" type="submit">Salvar configuracoes</button>
+          <button class="btn" type="button" id="resetSettingsView">Recarregar</button>
+        </div>
+      </form>
+    </section>
+  `;
 }
 
 function checkboxField(name, label, checked) {
@@ -3331,6 +3497,8 @@ function bindDrawerTabs() {
           panel.classList.toggle('active', panel.dataset.tabPanel === target);
         });
         if (button.dataset.settingsTab) state.settingsTab = button.dataset.settingsTab;
+        if (button.dataset.settingsSystemTab) state.settingsSystemTab = button.dataset.settingsSystemTab;
+        if (button.dataset.taskTab) state.taskTab = button.dataset.taskTab;
         if (button.dataset.aiTab) state.aiTab = button.dataset.aiTab;
       });
     });

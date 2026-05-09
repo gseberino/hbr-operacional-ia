@@ -163,6 +163,37 @@ button {
   color: var(--muted);
 }
 
+.top-action-menu {
+  position: relative;
+}
+
+.top-action-menu summary {
+  list-style: none;
+}
+
+.top-action-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.top-action-menu > div {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 12;
+  min-width: 220px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.top-action-menu .btn {
+  justify-content: flex-start;
+}
+
 .content {
   padding: 24px;
   display: grid;
@@ -1721,6 +1752,17 @@ th,
 
 .settings-tabs {
   margin-bottom: 4px;
+}
+
+.task-workspace > .drawer-tab-panel,
+.system-subtabs > .drawer-tab-panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.task-workspace .band {
+  box-shadow: none;
 }
 
 .entity-table-band {
