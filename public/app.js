@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.3';
+const appVersion = '0.3.4';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -2837,7 +2837,8 @@ function renderTemplateSettings() {
   const templates = availableTaskTemplates();
   return `
     <section class="settings-panel">
-      <h3>Templates operacionais HBR</h3>
+          <h3>Modelos de preenchimento de tarefa</h3>
+          <p class="muted">Edite aqui os modelos que aparecem no topo do pop-up da tarefa. Eles definem categoria, prioridade, esforco, proxima acao, resultado esperado, checklist e subtarefas.</p>
       <div class="grid three">
         ${templates.map((template) => `
           <article class="automation-card">
@@ -3201,9 +3202,9 @@ function openTaskDrawer(item = {}) {
   const body = `
     <form class="form-grid">
       <div class="template-strip">
-        <span title="Preenche a tarefa com categoria, prioridade, esforco, checklist, subtarefas, proxima acao e resultado esperado padrao da HBR.">Templates HBR</span>
+        <span title="Aplica um modelo de preenchimento nos campos operacionais da tarefa. O titulo existente nao e alterado.">Preencher com modelo</span>
         ${availableTaskTemplates().slice(0, 10).map((template) => `
-          <button class="btn small" type="button" data-template="${escapeHtml(template.key)}" title="${escapeHtml(template.description || 'Aplicar template HBR')}">${escapeHtml(template.name)}</button>
+          <button class="btn small" type="button" data-template="${escapeHtml(template.key)}" title="${escapeHtml(template.description || 'Aplicar modelo de preenchimento HBR')}">${escapeHtml(template.name)}</button>
         `).join('')}
       </div>
       ${inputField('Titulo', 'title', item.title)}
@@ -3310,16 +3311,37 @@ function bindTaskTemplates() {
       const template = taskTemplateByKey(button.dataset.template);
       const form = button.closest('form');
       if (!template || !form) return;
-      if (form.elements.title && !form.elements.title.value && template.name) form.elements.title.value = template.title || template.name;
-      for (const [field, value] of Object.entries(template)) {
-        if (field === 'checklist') form.querySelector('[name="checklist_text"]').value = value.join('\n');
-        else if (field === 'subtasks') form.querySelector('[name="subtasks_text"]').value = value.join('\n');
-        else if (form.elements[field] && !form.elements[field].value) form.elements[field].value = value;
-      }
+      applyTaskTemplateToForm(form, template);
       form.elements.operational_score.value = operationalScoreForTask(formData(form));
-      toast('Template HBR aplicado: checklist, subtarefas e campos principais preenchidos.');
+      button.closest('.template-strip')?.querySelectorAll('[data-template]').forEach((node) => node.classList.remove('active'));
+      button.classList.add('active');
+      toast(`Modelo aplicado: ${template.name || template.key}. Revise e clique em Salvar.`);
     });
   });
+}
+
+function applyTaskTemplateToForm(form, template) {
+  const fieldMap = {
+    category: template.category,
+    priority: template.priority,
+    estimated_minutes: template.estimated_minutes,
+    next_action: template.next_action,
+    expected_result: template.expected_result
+  };
+  for (const [field, value] of Object.entries(fieldMap)) {
+    if (form.elements[field] && value !== undefined && value !== null && value !== '') {
+      form.elements[field].value = value;
+    }
+  }
+  if (form.elements.title && !form.elements.title.value && (template.title || template.name)) {
+    form.elements.title.value = template.title || template.name;
+  }
+  if (form.querySelector('[name="checklist_text"]') && Array.isArray(template.checklist)) {
+    form.querySelector('[name="checklist_text"]').value = template.checklist.join('\n');
+  }
+  if (form.querySelector('[name="subtasks_text"]') && Array.isArray(template.subtasks)) {
+    form.querySelector('[name="subtasks_text"]').value = template.subtasks.join('\n');
+  }
 }
 
 function bindTaskDrawerActions() {

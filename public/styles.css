@@ -553,6 +553,12 @@ tr:last-child td {
   margin-right: 4px;
 }
 
+.template-strip .btn.active {
+  border-color: var(--accent);
+  background: #fbf1df;
+  color: #6f4b16;
+}
+
 .score-badge {
   width: 42px;
   min-height: 32px;

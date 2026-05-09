@@ -12,7 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const publicDir = join(rootDir, 'public');
 const PORT = Number(process.env.PORT || 4173);
-const APP_VERSION = '0.3.3';
+const APP_VERSION = '0.3.4';
 
 migrate();
 
