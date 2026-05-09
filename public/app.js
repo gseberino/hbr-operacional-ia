@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.7';
+const appVersion = '0.3.8';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -3174,8 +3174,8 @@ function renderTaskDrawerActivity(item) {
   const comments = (state.data.comments || []).filter((comment) => comment.entity_type === 'tasks' && Number(comment.entity_id) === Number(item.id));
   const dependencies = (state.data.taskDependencies || []).filter((dep) => Number(dep.task_id) === Number(item.id));
   return `
-    <section class="inline-panel">
-      <h3>Comentarios e atividade</h3>
+    <details class="detail-block task-records">
+      <summary>Comentarios, dependencias e historico</summary>
       ${textareaField('Novo comentario interno', 'new_comment_text', '')}
       ${comments.length ? comments.slice(0, 6).map((comment) => `
         <article class="activity-item">
@@ -3184,9 +3184,10 @@ function renderTaskDrawerActivity(item) {
           <p>${escapeHtml(comment.content)}</p>
         </article>
       `).join('') : '<div class="empty">Sem comentarios nesta tarefa.</div>'}
-    </section>
-    <section class="inline-panel">
-      <h3>Dependencias reais</h3>
+      <div class="record-divider">
+        <strong>Dependencias reais</strong>
+        <span>Use somente quando uma tarefa depende de outra entrega para continuar.</span>
+      </div>
       <div class="form-grid two">
         ${relationSelect('Nova dependencia de tarefa', 'new_dependency_task', taskOptions('', item.id))}
         ${inputField('Nota da dependencia', 'new_dependency_note', '')}
@@ -3198,7 +3199,28 @@ function renderTaskDrawerActivity(item) {
           <p>${escapeHtml(dep.note || '')}</p>
         </article>
       `).join('') : '<div class="empty">Sem dependencias registradas.</div>'}
-    </section>
+      <p class="muted">Historico completo fica registrado automaticamente a cada alteracao importante. Esta area existe para consulta e anotacoes, nao para preenchimento diario.</p>
+    </details>
+  `;
+}
+
+function renderTaskOperationalTools(item) {
+  if (!item.id) return '<div class="empty">Salve a tarefa para liberar timer, rascunhos e registros.</div>';
+  const timerSeconds = currentTimerSeconds(item);
+  return `
+    <details class="detail-block task-tools">
+      <summary>Ferramentas da tarefa</summary>
+      <div class="inline-panel">
+        <h3>Timer e rascunhos</h3>
+        <div class="actions">
+          <span class="timer-readout ${item.timer_running ? 'running' : ''}" data-timer-readout="${item.id}">${formatDuration(timerSeconds)}</span>
+          <button class="btn small" data-drawer-timer-start="${item.id}" type="button">${item.timer_running ? 'Continuar timer' : 'Iniciar timer'}</button>
+          <button class="btn small" data-drawer-timer-pause="${item.id}" type="button">Pausar timer</button>
+          <button class="btn small" data-drawer-draft-email="${item.id}" type="button">Criar rascunho de e-mail</button>
+          <button class="btn small" data-drawer-draft-whatsapp="${item.id}" type="button">Criar rascunho de WhatsApp</button>
+        </div>
+      </div>
+    </details>
   `;
 }
 
@@ -3266,7 +3288,6 @@ function bindDrawerTabs() {
 }
 
 function openTaskDrawer(item = {}) {
-  const timerSeconds = currentTimerSeconds(item);
   const body = `
     <form class="form-grid task-editor-form">
       <div class="template-strip compact-template-strip">
@@ -3283,9 +3304,6 @@ function openTaskDrawer(item = {}) {
         <button class="active" type="button" data-tab-target="task-basic">Essencial</button>
         <button type="button" data-tab-target="task-priority">Prazo e importancia</button>
         <button type="button" data-tab-target="task-context">Contexto e bloqueios</button>
-        <button type="button" data-tab-target="task-checklist">Checklist</button>
-        <button type="button" data-tab-target="task-ai">IA e automacao</button>
-        <button type="button" data-tab-target="task-actions">Acoes e historico</button>
       </div>
 
       <section class="drawer-tab-panel active" data-tab-panel="task-basic">
@@ -3301,6 +3319,12 @@ function openTaskDrawer(item = {}) {
         </div>
         ${inputField('Proxima acao', 'next_action', item.next_action)}
         ${renderTaskRelationSummary(item)}
+        <details class="detail-block checklist-trigger">
+          <summary>${(item.checklist || []).length || (item.subtasks || []).length ? 'Editar checklist' : 'Adicionar checklist'}</summary>
+          <p class="muted">Use quando a tarefa precisa virar passos de execucao. Se for uma tarefa simples, pode deixar fechado.</p>
+          ${textareaField('Checklist', 'checklist_text', (item.checklist || []).join('\n'))}
+          ${textareaField('Subtarefas', 'subtasks_text', (item.subtasks || []).join('\n'))}
+        </details>
       </section>
 
       <section class="drawer-tab-panel" data-tab-panel="task-priority">
@@ -3342,43 +3366,8 @@ function openTaskDrawer(item = {}) {
         ${textareaField('Bloqueio / risco de execucao', 'blocker_reason', item.blocker_reason)}
       </section>
 
-      <section class="drawer-tab-panel" data-tab-panel="task-checklist">
-        <div class="tab-panel-head">
-          <h3>Checklist e subtarefas</h3>
-          <p>Quebre a demanda em passos objetivos para execucao, revisao ou delegacao futura.</p>
-        </div>
-        ${textareaField('Checklist', 'checklist_text', (item.checklist || []).join('\n'))}
-        ${textareaField('Subtarefas', 'subtasks_text', (item.subtasks || []).join('\n'))}
-      </section>
-
-      <section class="drawer-tab-panel" data-tab-panel="task-ai">
-        <div class="tab-panel-head">
-          <h3>IA e automacao</h3>
-          <p>Informacoes usadas pela IA para explicar a classificacao, estimar confianca e preservar rastreabilidade.</p>
-        </div>
-        <div class="form-grid two">
-          ${inputField('Confianca IA (%)', 'confidence_score', item.confidence_score || 70, 'number')}
-        </div>
-        ${textareaField('Resumo do raciocinio da IA', 'ai_reasoning_summary', item.ai_reasoning_summary || item.reasoning)}
-      </section>
-
-      <section class="drawer-tab-panel" data-tab-panel="task-actions">
-        <div class="tab-panel-head">
-          <h3>Acoes e historico</h3>
-          <p>Acoes manuais, rascunhos, timer, comentarios e dependencias ficam separados para nao poluir o preenchimento principal.</p>
-        </div>
-        ${item.id ? `
-          <section class="inline-panel">
-            <h3>Acoes da tarefa</h3>
-            <div class="actions">
-              <span class="timer-readout ${item.timer_running ? 'running' : ''}" data-timer-readout="${item.id}">${formatDuration(timerSeconds)}</span>
-              <button class="btn small" data-drawer-timer-start="${item.id}" type="button">${item.timer_running ? 'Continuar timer' : 'Iniciar timer'}</button>
-              <button class="btn small" data-drawer-timer-pause="${item.id}" type="button">Pausar timer</button>
-              <button class="btn small" data-drawer-draft-email="${item.id}" type="button">Criar rascunho de e-mail</button>
-              <button class="btn small" data-drawer-draft-whatsapp="${item.id}" type="button">Criar rascunho de WhatsApp</button>
-            </div>
-          </section>
-        ` : '<div class="empty">Salve a tarefa para liberar acoes, comentarios e historico.</div>'}
+      <section class="drawer-utility-area">
+        ${renderTaskOperationalTools(item)}
         ${item.id ? renderTaskDrawerActivity(item) : ''}
       </section>
 

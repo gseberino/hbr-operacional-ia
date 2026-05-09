@@ -1556,6 +1556,45 @@ th,
   margin: 12px;
 }
 
+.detail-block > p,
+.detail-block > .activity-item,
+.detail-block > .empty,
+.detail-block > .record-divider,
+.detail-block > .inline-panel {
+  margin: 12px;
+}
+
+.drawer-utility-area {
+  display: grid;
+  gap: 10px;
+}
+
+.checklist-trigger {
+  border-left: 4px solid var(--accent);
+}
+
+.task-tools,
+.task-records {
+  background: #fff;
+}
+
+.record-divider {
+  display: grid;
+  gap: 3px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.record-divider strong {
+  color: var(--marine);
+}
+
+.record-divider span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .filter-details {
   margin-top: 12px;
 }
