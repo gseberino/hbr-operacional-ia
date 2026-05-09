@@ -480,15 +480,18 @@ try {
 
   const appJs = await textRequest('/app.js');
   const frontendText = `${appJs}\n${await textRequest('/styles.css')}`;
-  for (const expected of ['Copiar p/ grupo', 'Copiar relatorio', 'Relatorio PDF', 'Agenda PDF', 'Kanban PDF', 'Rendimento do dia', 'Carga por responsavel', 'Filtros', 'filter_responsible', 'filter_kanban_group', 'filter_planning_view', 'filter_saved_view_id', 'Salvar view atual', 'Central de Planejamento', 'planning-board', 'Por responsavel', 'Responsaveis', 'Periodos do dia', 'Meta diaria de tarefas', 'Analise operacional', 'Plano do dia', 'Templates HBR', 'Templates operacionais HBR', 'Campos customizados', 'Automacoes internas', 'Score operacional', 'data-kanban-status', 'data-kanban-responsible', 'data-score-task', 'data-effort-task', 'data-quick-field', 'data-timer-start', 'data-timer-pause', 'Conferir timer a cada', 'Como o Agente IA trabalha', 'settingsForm', 'Passo do score', 'Passo do esforço', 'Salvar configuracoes']) {
+  for (const expected of ['Copiar p/ grupo', 'Copiar relatorio', 'Relatorio PDF', 'Agenda PDF', 'Kanban PDF', 'Rendimento do dia', 'Carga por responsavel', 'Filtros', 'filter_responsible', 'filter_kanban_group', 'filter_planning_view', 'filter_saved_view_id', 'Salvar view atual', 'Central de Planejamento', 'planning-board', 'Por responsavel', 'Responsaveis', 'Periodos do dia', 'Meta diaria de tarefas', 'Analise operacional', 'Plano do dia', 'Templates HBR', 'Templates operacionais HBR', 'Campos customizados', 'Automacoes internas', 'Score operacional', 'data-kanban-status', 'data-kanban-responsible', 'data-edit-task', 'data-drawer-draft-email', 'data-drawer-draft-whatsapp', 'data-drawer-timer-start', 'data-drawer-timer-pause', 'Conferir timer a cada', 'Como o Agente IA trabalha', 'settingsForm', 'Passo do score', 'Passo do esforço', 'Salvar configuracoes']) {
     assert(frontendText.includes(expected), `Frontend nao contem controle esperado: ${expected}`);
   }
   for (const expected of ['Colaborador IA 24h', 'agentChatForm', 'data-agent-chat-form', 'floating-agent', 'Chat IA suspenso', 'agentDismissedQuestionId', 'data-agent-choice', 'data-agent-autosend', 'requestSubmit', 'resize: both', 'Planejamento e execucao', 'agent_idle_minutes', 'Ativar colaborador IA proativo', 'Agenda semanal de demandas HBR', 'agenda-week-grid', 'Manha', 'Tarde']) {
     assert(frontendText.includes(expected), `Frontend nao contem controle esperado do agente: ${expected}`);
   }
-  assert(appJs.includes("const appVersion = '0.3.2'"), 'Versao visivel do app nao foi atualizada.');
+  for (const removed of ['data-score-task', 'data-effort-task', 'data-quick-field', 'data-timer-start', 'data-timer-pause']) {
+    assert(!frontendText.includes(removed), `Controle rapido antigo ainda esta poluindo os blocos: ${removed}`);
+  }
+  assert(appJs.includes("const appVersion = '0.3.3'"), 'Versao visivel do app nao foi atualizada.');
   const version = await request('/api/app-version', { headers: { Cookie: cookie } });
-  assert(version.data.version === '0.3.2', 'Backend nao reportou versao 0.3.2.');
+  assert(version.data.version === '0.3.3', 'Backend nao reportou versao 0.3.3.');
 
   console.log(JSON.stringify({
     status: 'E2E OK',

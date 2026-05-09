@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.2';
+const appVersion = '0.3.3';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -1303,32 +1303,9 @@ function responsibleLaneValues(tasks) {
 }
 
 function renderTaskQuickActions(task) {
-  const step = scoreStep();
-  const effortStep = effortStepMinutes();
   return `
-    <div class="quick-controls">
-      <select data-quick-task="${task.id}" data-quick-field="status" title="Status">${optionList(taskStatuses, task.status)}</select>
-      <select data-quick-task="${task.id}" data-quick-field="priority" title="Prioridade">${optionList(priorities, task.priority)}</select>
-      <select data-quick-task="${task.id}" data-quick-field="category" title="Categoria">${optionList(categories, task.category)}</select>
-      <select data-quick-task="${task.id}" data-quick-field="responsible" title="Responsavel">${optionList([['', 'Sem responsavel'], ...responsibleOptions()], task.responsible || '')}</select>
-      <input data-quick-task="${task.id}" data-quick-field="due_date" type="date" value="${escapeHtml(task.due_date || '')}" title="Prazo">
-      <input data-quick-task="${task.id}" data-quick-field="planned_date" type="date" value="${escapeHtml(task.planned_date || '')}" title="Planejado para">
-      <select data-quick-task="${task.id}" data-quick-field="planned_period" title="Periodo">${optionList(planningPeriodOptions(), task.planned_period || planningPeriod(task))}</select>
-      <input data-quick-task="${task.id}" data-quick-field="follow_up_at" type="date" value="${escapeHtml((task.follow_up_at || '').slice(0, 10))}" title="Follow-up">
-    </div>
-    <div class="timer-row">
-      <span class="timer-readout ${task.timer_running ? 'running' : ''}" data-timer-readout="${task.id}">${formatDuration(currentTimerSeconds(task))}</span>
-      <button class="btn small" data-timer-start="${task.id}" type="button">${task.timer_running ? 'Continuar' : 'Iniciar'}</button>
-      <button class="btn small" data-timer-pause="${task.id}" type="button">Pausar</button>
-    </div>
-    <div class="actions task-actions">
-      <button class="btn small" data-edit-task="${task.id}" type="button">Editar</button>
-      <button class="btn small" data-draft-email="${task.id}" type="button">E-mail</button>
-      <button class="btn small" data-draft-whatsapp="${task.id}" type="button">WhatsApp</button>
-      <button class="btn small icon" data-score-task="${task.id}" data-score-delta="${step}" type="button" title="Aumentar score em ${step}">+${step}</button>
-      <button class="btn small icon" data-score-task="${task.id}" data-score-delta="-${step}" type="button" title="Diminuir score em ${step}">-${step}</button>
-      <button class="btn small" data-effort-task="${task.id}" data-effort-delta="${effortStep}" type="button" title="Aumentar esforço em ${effortStep} minutos">+${effortStep}m</button>
-      <button class="btn small" data-effort-task="${task.id}" data-effort-delta="-${effortStep}" type="button" title="Diminuir esforço em ${effortStep} minutos">-${effortStep}m</button>
+    <div class="actions task-actions compact-actions">
+      <button class="btn small primary" data-edit-task="${task.id}" type="button">Editar</button>
     </div>
   `;
 }
@@ -1428,121 +1405,8 @@ function applySavedView(id) {
 }
 
 function bindTaskQuickActions() {
-  document.querySelectorAll('[data-quick-task]').forEach((field) => {
-    field.addEventListener('change', async () => {
-      const task = state.data.tasks.find((item) => item.id === Number(field.dataset.quickTask));
-      if (!task) return;
-      const key = field.dataset.quickField;
-      const payload = { [key]: field.value };
-      if (key === 'status' && field.value === 'em_andamento' && !task.timer_running) {
-        Object.assign(payload, startTimerPayload(task));
-      }
-      if (key === 'status' && field.value !== 'em_andamento' && task.timer_running) {
-        Object.assign(payload, pauseTimerPayload(task));
-      }
-      try {
-        await api(`/api/tasks/${task.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-        await loadAll();
-        renderApp();
-        toast(`${quickFieldLabel(key)} atualizado.`);
-      } catch (error) {
-        field.value = task[key] || '';
-        toast(error.message);
-      }
-    });
-  });
   document.querySelectorAll('[data-edit-task]').forEach((button) => {
     button.addEventListener('click', () => openTaskDrawer(state.data.tasks.find((item) => item.id === Number(button.dataset.editTask))));
-  });
-  document.querySelectorAll('[data-draft-email], [data-draft-whatsapp]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const id = button.dataset.draftEmail || button.dataset.draftWhatsapp;
-      const type = button.dataset.draftWhatsapp ? 'whatsapp' : 'email';
-      try {
-        await api(`/api/tasks/${id}/drafts`, { method: 'POST', body: JSON.stringify({ type }) });
-        await loadAll();
-        state.view = 'ai';
-        renderApp();
-        toast('Rascunho criado para revisao.');
-      } catch (error) {
-        toast(error.message);
-      }
-    });
-  });
-  document.querySelectorAll('[data-score-task]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const task = state.data.tasks.find((item) => item.id === Number(button.dataset.scoreTask));
-      if (!task) return;
-      const delta = Number(button.dataset.scoreDelta || 0);
-      const score = Math.max(0, Math.min(100, operationalScoreForTask(task) + delta));
-      try {
-        await api(`/api/tasks/${task.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ operational_score: score })
-        });
-        task.operational_score = score;
-        await loadAll();
-        renderApp();
-        toast(`Score atualizado para ${score}.`);
-      } catch (error) {
-        toast(error.message);
-      }
-    });
-  });
-  document.querySelectorAll('[data-effort-task]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const task = state.data.tasks.find((item) => item.id === Number(button.dataset.effortTask));
-      if (!task) return;
-      const delta = Number(button.dataset.effortDelta || 0);
-      const minutes = Math.max(5, Math.min(480, Number(task.estimated_minutes || state.data.settings?.default_estimated_minutes || 30) + delta));
-      try {
-        await api(`/api/tasks/${task.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ estimated_minutes: minutes })
-        });
-        task.estimated_minutes = minutes;
-        await loadAll();
-        renderApp();
-        toast(`Esforco atualizado para ${minutesLabel(minutes)}.`);
-      } catch (error) {
-        toast(error.message);
-      }
-    });
-  });
-  document.querySelectorAll('[data-timer-start]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const task = state.data.tasks.find((item) => item.id === Number(button.dataset.timerStart));
-      if (!task) return;
-      try {
-        await requestNotificationPermission();
-        await api(`/api/tasks/${task.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ ...startTimerPayload(task), status: 'em_andamento' })
-        });
-        await loadAll();
-        renderApp();
-        toast('Timer iniciado.');
-      } catch (error) {
-        toast(error.message);
-      }
-    });
-  });
-  document.querySelectorAll('[data-timer-pause]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const task = state.data.tasks.find((item) => item.id === Number(button.dataset.timerPause));
-      if (!task) return;
-      try {
-        await api(`/api/tasks/${task.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(pauseTimerPayload(task))
-        });
-        await loadAll();
-        renderApp();
-        toast('Timer pausado.');
-      } catch (error) {
-        toast(error.message);
-      }
-    });
   });
   document.querySelectorAll('[data-open-task]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -3333,6 +3197,7 @@ function closeDrawer() {
 }
 
 function openTaskDrawer(item = {}) {
+  const timerSeconds = currentTimerSeconds(item);
   const body = `
     <form class="form-grid">
       <div class="template-strip">
@@ -3371,6 +3236,18 @@ function openTaskDrawer(item = {}) {
       ${textareaField('Resumo do raciocinio da IA', 'ai_reasoning_summary', item.ai_reasoning_summary || item.reasoning)}
       ${textareaField('Checklist', 'checklist_text', (item.checklist || []).join('\n'))}
       ${textareaField('Subtarefas', 'subtasks_text', (item.subtasks || []).join('\n'))}
+      ${item.id ? `
+        <section class="inline-panel">
+          <h3>Acoes da tarefa</h3>
+          <div class="actions">
+            <span class="timer-readout ${item.timer_running ? 'running' : ''}" data-timer-readout="${item.id}">${formatDuration(timerSeconds)}</span>
+            <button class="btn small" data-drawer-timer-start="${item.id}" type="button">${item.timer_running ? 'Continuar timer' : 'Iniciar timer'}</button>
+            <button class="btn small" data-drawer-timer-pause="${item.id}" type="button">Pausar timer</button>
+            <button class="btn small" data-drawer-draft-email="${item.id}" type="button">Criar rascunho de e-mail</button>
+            <button class="btn small" data-drawer-draft-whatsapp="${item.id}" type="button">Criar rascunho de WhatsApp</button>
+          </div>
+        </section>
+      ` : ''}
       ${item.id ? renderTaskDrawerActivity(item) : ''}
       <div class="actions">
         <button class="btn primary" type="submit">Salvar</button>
@@ -3424,6 +3301,7 @@ function openTaskDrawer(item = {}) {
     }
   });
   bindTaskTemplates();
+  bindTaskDrawerActions();
 }
 
 function bindTaskTemplates() {
@@ -3440,6 +3318,62 @@ function bindTaskTemplates() {
       }
       form.elements.operational_score.value = operationalScoreForTask(formData(form));
       toast('Template HBR aplicado: checklist, subtarefas e campos principais preenchidos.');
+    });
+  });
+}
+
+function bindTaskDrawerActions() {
+  document.querySelectorAll('[data-drawer-draft-email], [data-drawer-draft-whatsapp]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const id = button.dataset.drawerDraftEmail || button.dataset.drawerDraftWhatsapp;
+      const type = button.dataset.drawerDraftWhatsapp ? 'whatsapp' : 'email';
+      try {
+        await api(`/api/tasks/${id}/drafts`, { method: 'POST', body: JSON.stringify({ type }) });
+        await loadAll();
+        closeDrawer();
+        state.view = 'ai';
+        renderApp();
+        toast('Rascunho criado para revisao.');
+      } catch (error) {
+        toast(error.message);
+      }
+    });
+  });
+  document.querySelectorAll('[data-drawer-timer-start]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const task = state.data.tasks.find((item) => item.id === Number(button.dataset.drawerTimerStart));
+      if (!task) return;
+      try {
+        await requestNotificationPermission();
+        await api(`/api/tasks/${task.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ ...startTimerPayload(task), status: 'em_andamento' })
+        });
+        await loadAll();
+        renderApp();
+        openTaskDrawer(state.data.tasks.find((item) => item.id === task.id));
+        toast('Timer iniciado.');
+      } catch (error) {
+        toast(error.message);
+      }
+    });
+  });
+  document.querySelectorAll('[data-drawer-timer-pause]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const task = state.data.tasks.find((item) => item.id === Number(button.dataset.drawerTimerPause));
+      if (!task) return;
+      try {
+        await api(`/api/tasks/${task.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(pauseTimerPayload(task))
+        });
+        await loadAll();
+        renderApp();
+        openTaskDrawer(state.data.tasks.find((item) => item.id === task.id));
+        toast('Timer pausado.');
+      } catch (error) {
+        toast(error.message);
+      }
     });
   });
 }
