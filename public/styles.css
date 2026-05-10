@@ -971,6 +971,21 @@ tr:last-child td {
   line-height: 1.35;
 }
 
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, white);
+  border-radius: 8px;
+  color: var(--brand);
+  line-height: 1.45;
+}
+
+.compact-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .inline-panel {
   display: grid;
   gap: 10px;
@@ -1359,6 +1374,61 @@ tr:last-child td {
 
   .content {
     padding: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .nav {
+    gap: 6px;
+    padding-bottom: 2px;
+  }
+
+  .nav button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 9px;
+  }
+
+  .nav button span:last-child {
+    display: none;
+  }
+
+  .topbar-title {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .topbar-title h1 {
+    font-size: 22px;
+  }
+
+  .topbar-actions,
+  .section-head,
+  .compact-head {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .top-action-menu,
+  .top-action-menu summary,
+  .top-action-menu div,
+  .top-action-menu button,
+  .section-head .actions,
+  .section-head .actions .btn {
+    width: 100%;
+  }
+
+  .drawer {
+    width: min(100vw - 16px, 720px);
+    max-height: calc(100vh - 16px);
   }
 }
 

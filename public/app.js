@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.11';
+const appVersion = '0.3.12';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -34,6 +34,18 @@ const state = {
   agentIdlePromptedAt: 0,
   agentFloatingOpen: false,
   agentDismissedQuestionId: null,
+  pwa: {
+    os: 'desconhecido',
+    browser: 'desconhecido',
+    standalone: false,
+    serviceWorkerReady: false,
+    pushSupported: false,
+    notificationPermission: 'default',
+    pushSubscribed: false,
+    installPromptAvailable: false,
+    installPrompt: null,
+    serverStatus: null
+  },
   settingsTab: 'empresa',
   settingsSystemTab: 'planejamento',
   taskTab: 'planejamento',
@@ -285,6 +297,131 @@ function scopedFormData(container) {
   return data;
 }
 
+function detectClientPlatform() {
+  const ua = navigator.userAgent || '';
+  const platform = navigator.userAgentData?.platform || navigator.platform || '';
+  const ios = /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua);
+  const windows = /Win/i.test(platform);
+  const macos = /Mac/i.test(platform) && !ios;
+  const browser = /Edg\//.test(ua) ? 'Edge'
+    : /Chrome\//.test(ua) && !/Edg\//.test(ua) ? 'Chrome'
+      : /Safari\//.test(ua) && !/Chrome\//.test(ua) ? 'Safari'
+        : /Firefox\//.test(ua) ? 'Firefox'
+          : 'Navegador';
+  return {
+    os: ios ? 'iOS/iPadOS' : android ? 'Android' : windows ? 'Windows' : macos ? 'macOS' : 'Sistema desconhecido',
+    browser,
+    standalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+  };
+}
+
+async function initPwa() {
+  const platform = detectClientPlatform();
+  state.pwa = {
+    ...state.pwa,
+    ...platform,
+    notificationPermission: 'Notification' in window ? Notification.permission : 'unsupported',
+    pushSupported: 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  };
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    state.pwa.installPrompt = event;
+    state.pwa.installPromptAvailable = true;
+    if (state.view === 'settings') renderApp();
+  });
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.register('/service-worker.js');
+    await navigator.serviceWorker.ready;
+    state.pwa.serviceWorkerReady = Boolean(registration.active || registration.waiting || registration.installing);
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'HBR_NOTIFICATION_OPEN') {
+        navigateFromNotification(event.data.url, event.data.data);
+      }
+    });
+  } catch (error) {
+    console.warn('Falha ao registrar Service Worker', error);
+    state.pwa.serviceWorkerReady = false;
+  }
+}
+
+function navigateFromNotification(url, data = {}) {
+  const target = new URL(url || '/', window.location.origin);
+  const view = target.searchParams.get('view') || data.view;
+  if (view && labels[view]) state.view = view;
+  if (data.taskId) {
+    const task = state.data.tasks.find((item) => item.id === Number(data.taskId));
+    if (task) setTimeout(() => openTaskDrawer(task), 100);
+  }
+  loadAll().then(renderApp).catch(() => renderApp());
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+async function subscribePushNotifications() {
+  if (!state.pwa.pushSupported) throw new Error('Este navegador nao suporta Web Push completo.');
+  const permission = await Notification.requestPermission();
+  state.pwa.notificationPermission = permission;
+  if (permission !== 'granted') throw new Error('Permissao de notificacao nao foi concedida.');
+  const status = state.pwa.serverStatus || await api('/api/push/status');
+  const registration = await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
+  const subscription = existing || await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(status.publicKey)
+  });
+  state.pwa.serverStatus = await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      subscription: subscription.toJSON(),
+      platform: state.pwa.os,
+      browser: state.pwa.browser,
+      userAgent: navigator.userAgent
+    })
+  });
+  state.pwa.pushSubscribed = true;
+  return state.pwa.serverStatus;
+}
+
+async function unsubscribePushNotifications() {
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (subscription) {
+    await api('/api/push/unsubscribe', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint: subscription.endpoint })
+    });
+    await subscription.unsubscribe();
+  }
+  state.pwa.pushSubscribed = false;
+  state.pwa.serverStatus = await safeApi('/api/push/status', state.pwa.serverStatus);
+}
+
+async function showHbrNotification(title, body, options = {}) {
+  const granted = await requestNotificationPermission();
+  if (!granted) return false;
+  const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready.catch(() => null) : null;
+  if (registration?.showNotification) {
+    await registration.showNotification(title, {
+      body,
+      icon: '/assets/hbr-logo-mark.png',
+      badge: '/assets/hbr-logo-mark.png',
+      tag: options.tag || `hbr-local-${Date.now()}`,
+      data: options.data || { url: '/' },
+      requireInteraction: Boolean(options.requireInteraction)
+    });
+    return true;
+  }
+  new Notification(title, { body });
+  return true;
+}
+
 function parseLines(value) {
   return String(value || '').split('\n').map((item) => item.trim()).filter(Boolean);
 }
@@ -338,6 +475,8 @@ function renderAuth(needsSetup) {
 }
 
 async function bootstrap() {
+  await initPwa();
+  applyInitialRoute();
   const setup = await api('/api/setup/status');
   if (setup.needsSetup) return renderAuth(true);
   try {
@@ -349,11 +488,21 @@ async function bootstrap() {
   }
 }
 
+function applyInitialRoute() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get('view');
+  if (view && labels[view]) state.view = view;
+  const settingsTab = params.get('tab') || params.get('settingsTab');
+  if (settingsTab) state.settingsTab = settingsTab;
+  const systemTab = params.get('systemTab');
+  if (systemTab) state.settingsSystemTab = systemTab;
+}
+
 async function loadAll() {
   const [
     dashboard, clients, assets, projects, tasks, documents, aiActions, savedViews, comments,
     automationRules, automationRuns, taskTemplatesData, taskDependencies, customFields,
-    appInfo, agentMessages, agentProactive, settings
+    appInfo, agentMessages, agentProactive, settings, pushStatus
   ] = await Promise.all([
     api('/api/dashboard'),
     api('/api/clients'),
@@ -372,13 +521,18 @@ async function loadAll() {
     safeApi('/api/app-version', null),
     safeApi('/api/agent/messages', []),
     safeApi('/api/agent/proactive', { reminders: [], patterns: [], enabled: false }),
-    api('/api/settings')
+    api('/api/settings'),
+    safeApi('/api/push/status', null)
   ]);
   state.data = {
     dashboard, clients, assets, projects, tasks, documents, aiActions, savedViews, comments,
     automationRules, automationRuns, taskTemplates: taskTemplatesData, taskDependencies, customFields,
     appInfo, agentMessages, agentProactive, settings
   };
+  if (pushStatus) {
+    state.pwa.serverStatus = pushStatus;
+    state.pwa.pushSubscribed = Boolean((pushStatus.subscriptions || []).some((item) => item.enabled));
+  }
 }
 
 function renderApp() {
@@ -1685,16 +1839,16 @@ async function requestNotificationPermission() {
   if (Notification.permission === 'granted') return true;
   if (Notification.permission === 'denied') return false;
   const permission = await Notification.requestPermission();
+  state.pwa.notificationPermission = permission;
   return permission === 'granted';
 }
 
 async function notifyTimerPaused(task) {
-  const granted = await requestNotificationPermission();
-  if (granted) {
-    new Notification('Timer HBR pausado', {
-      body: `Confirme se ainda esta executando: ${task.title}`
-    });
-  }
+  await showHbrNotification('Timer HBR pausado', `Confirme se ainda esta executando: ${task.title}`, {
+    tag: `timer-${task.id}`,
+    data: { url: `/?view=tasks&task=${task.id}`, taskId: task.id },
+    requireInteraction: true
+  });
 }
 
 function renderClients() {
@@ -2796,16 +2950,7 @@ function setupAgentProactive() {
 }
 
 function notifyUser(title, body) {
-  if (!('Notification' in window)) return;
-  if (Notification.permission === 'granted') {
-    new Notification(title, { body });
-    return;
-  }
-  if (Notification.permission === 'default') {
-    Notification.requestPermission().then((permission) => {
-      if (permission === 'granted') new Notification(title, { body });
-    });
-  }
+  showHbrNotification(title, body, { tag: `agent-${Date.now()}`, data: { url: '/?view=ai' } }).catch(() => {});
 }
 
 function legacyRenderSettingsUnused() {
@@ -2823,6 +2968,7 @@ function legacyRenderSettingsUnused() {
           ${settingsTabButton('empresa', 'Empresa')}
           ${settingsTabButton('sistema', 'Sistema')}
           ${settingsTabButton('ia', 'IA')}
+          ${settingsTabButton('notificacoes', 'Notificacoes')}
           ${settingsTabButton('integracoes', 'Integracoes')}
           ${settingsTabButton('benchmark', 'Benchmark')}
         </div>
@@ -3037,6 +3183,9 @@ function renderSettings() {
             </div>
           </section>
         </section>
+        <section class="drawer-tab-panel ${state.settingsTab === 'notificacoes' ? 'active' : ''}" data-tab-panel="settings-notificacoes">
+          ${renderNotificationSettings(settings)}
+        </section>
         <section class="drawer-tab-panel ${state.settingsTab === 'integracoes' ? 'active' : ''}" data-tab-panel="settings-integracoes">
           <section class="settings-panel">
             <h3>Integracoes</h3>
@@ -3067,6 +3216,65 @@ function renderSettings() {
           <button class="btn" type="button" id="resetSettingsView">Recarregar</button>
         </div>
       </form>
+    </section>
+  `;
+}
+
+function renderNotificationSettings(settings) {
+  const pwa = state.pwa;
+  const iosHint = pwa.os === 'iOS/iPadOS' && !pwa.standalone
+    ? '<p class="notice">No iPhone/iPad, o push em background exige abrir pelo app instalado na Tela de Inicio. Instale pelo compartilhar do Safari antes de ativar.</p>'
+    : '';
+  const supportLabel = pwa.pushSupported ? 'Web Push disponivel' : 'Push em background indisponivel neste navegador';
+  const swLabel = pwa.serviceWorkerReady ? 'Service Worker ativo' : 'Service Worker ainda nao ativo';
+  const subscriptions = pwa.serverStatus?.subscriptions || [];
+  return `
+    <section class="settings-panel">
+      <div class="section-head compact-head">
+        <div>
+          <h3>PWA e notificacoes globais</h3>
+          <p class="muted">Notificacoes de rotina tecnica, timer, prazos, follow-up, bloqueios e revisoes da IA em todo o sistema.</p>
+        </div>
+        <div class="actions">
+          <button class="btn small" type="button" id="installPwaBtn" ${pwa.installPromptAvailable ? '' : 'disabled'}>Instalar app</button>
+          <button class="btn small" type="button" id="enablePushBtn">Ativar push</button>
+          <button class="btn small" type="button" id="testPushBtn">Testar</button>
+        </div>
+      </div>
+      ${iosHint}
+      <div class="grid four">
+        <div class="metric"><span>Sistema</span><strong>${escapeHtml(pwa.os)}</strong><p class="muted">${escapeHtml(pwa.browser)}</p></div>
+        <div class="metric"><span>Instalacao</span><strong>${pwa.standalone ? 'Instalado' : 'Navegador'}</strong><p class="muted">PWA ${pwa.installPromptAvailable ? 'pronto para instalar' : 'controlado pelo navegador'}</p></div>
+        <div class="metric"><span>Service Worker</span><strong>${escapeHtml(swLabel)}</strong><p class="muted">Cache do app e notificacoes locais.</p></div>
+        <div class="metric"><span>Push</span><strong>${escapeHtml(supportLabel)}</strong><p class="muted">Permissao: ${escapeHtml(pwa.notificationPermission || 'default')}</p></div>
+      </div>
+      <div class="toggle-grid">
+        ${checkboxField('notifications_enabled', 'Ativar central global de notificacoes', settings.notifications_enabled)}
+        ${checkboxField('push_enabled', 'Enviar Web Push quando houver assinatura ativa', settings.push_enabled)}
+        ${checkboxField('notify_due_today', 'Avisar tarefas importantes vencendo hoje', settings.notify_due_today)}
+        ${checkboxField('notify_overdue', 'Avisar tarefas atrasadas', settings.notify_overdue)}
+        ${checkboxField('notify_follow_up', 'Avisar follow-ups programados', settings.notify_follow_up)}
+        ${checkboxField('notify_blockers', 'Avisar bloqueios parados', settings.notify_blockers)}
+        ${checkboxField('notify_ai_approvals', 'Avisar acoes da IA aguardando revisao', settings.notify_ai_approvals)}
+        ${checkboxField('notify_timer_checks', 'Avisar confirmacao de timer em andamento', settings.notify_timer_checks)}
+      </div>
+      <div class="form-grid two">
+        ${inputField('Varredura do servidor a cada (min)', 'notification_sweep_minutes', settings.notification_sweep_minutes || 5, 'number')}
+        <label class="field"><span>Dispositivos assinados</span><input readonly value="${subscriptions.length} dispositivo(s)"></label>
+      </div>
+      <details>
+        <summary>Dispositivos e compatibilidade</summary>
+        <div class="activity-list">
+          ${subscriptions.map((item) => `
+            <article class="activity-item">
+              <strong>${escapeHtml(item.platform || 'Dispositivo')}</strong>
+              <span>${escapeHtml(item.browser || '')} / ${item.enabled ? 'ativo' : 'pausado'}</span>
+              <p>${item.last_success_at ? `Ultimo envio: ${escapeHtml(new Date(item.last_success_at).toLocaleString('pt-BR'))}` : 'Ainda sem envio confirmado.'}</p>
+              ${item.last_error ? `<p class="danger-text">${escapeHtml(item.last_error)}</p>` : ''}
+            </article>
+          `).join('') || '<div class="empty">Nenhum dispositivo assinou Web Push ainda.</div>'}
+        </div>
+      </details>
     </section>
   `;
 }
@@ -3200,6 +3408,15 @@ function bindSettings() {
       agent_enabled: Boolean(raw.agent_enabled),
       agent_autonomous_internal_actions: Boolean(raw.agent_autonomous_internal_actions),
       agent_pattern_detection: Boolean(raw.agent_pattern_detection),
+      notifications_enabled: Boolean(raw.notifications_enabled),
+      push_enabled: Boolean(raw.push_enabled),
+      notify_due_today: Boolean(raw.notify_due_today),
+      notify_overdue: Boolean(raw.notify_overdue),
+      notify_follow_up: Boolean(raw.notify_follow_up),
+      notify_blockers: Boolean(raw.notify_blockers),
+      notify_ai_approvals: Boolean(raw.notify_ai_approvals),
+      notify_timer_checks: Boolean(raw.notify_timer_checks),
+      notification_sweep_minutes: raw.notification_sweep_minutes,
       custom_status_notes: raw.custom_status_notes,
       additional_categories: parseLines(raw.additional_categories_text),
       integrations: {
@@ -3227,6 +3444,37 @@ function bindSettings() {
 }
 
 function bindSettingsExtras() {
+  document.querySelector('#installPwaBtn')?.addEventListener('click', async () => {
+    if (!state.pwa.installPrompt) return toast('Instalacao controlada pelo navegador neste dispositivo.');
+    state.pwa.installPrompt.prompt();
+    await state.pwa.installPrompt.userChoice.catch(() => null);
+    state.pwa.installPrompt = null;
+    state.pwa.installPromptAvailable = false;
+    toast('Fluxo de instalacao acionado.');
+    renderApp();
+  });
+  document.querySelector('#enablePushBtn')?.addEventListener('click', async () => {
+    try {
+      await subscribePushNotifications();
+      await loadAll();
+      renderApp();
+      toast('Push ativado neste dispositivo.');
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  document.querySelector('#testPushBtn')?.addEventListener('click', async () => {
+    try {
+      if (!state.pwa.pushSubscribed) await subscribePushNotifications();
+      const result = await api('/api/push/test', { method: 'POST', body: JSON.stringify({}) });
+      await showHbrNotification('Teste local HBR', 'Fallback local pelo Service Worker tambem esta disponivel.', { tag: 'hbr-local-test' });
+      toast(result.sent ? 'Push de teste enviado.' : 'Teste local exibido; nenhum push remoto confirmado.');
+      state.pwa.serverStatus = await safeApi('/api/push/status', state.pwa.serverStatus);
+      renderApp();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
   document.querySelectorAll('[data-run-automation]').forEach((button) => {
     button.addEventListener('click', async () => {
       try {

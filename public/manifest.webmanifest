@@ -1,0 +1,49 @@
+{
+  "name": "HBR Operacional IA",
+  "short_name": "HBR IA",
+  "description": "Central operacional inteligente para tarefas tecnicas, clientes, ativos, OS e IA da HBR Systems.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7f8",
+  "theme_color": "#0d1b2a",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/assets/hbr-logo-mark.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/hbr-logo-mark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/hbr-logo-compact.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova tarefa",
+      "short_name": "Tarefa",
+      "description": "Abrir a caixa inteligente para registrar demanda.",
+      "url": "/?view=intake",
+      "icons": [{ "src": "/assets/hbr-logo-mark.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Tarefas de hoje",
+      "short_name": "Hoje",
+      "description": "Abrir a central de tarefas.",
+      "url": "/?view=tasks",
+      "icons": [{ "src": "/assets/hbr-logo-mark.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

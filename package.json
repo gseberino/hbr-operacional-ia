@@ -1,6 +1,6 @@
 {
   "name": "hbr-operacional-ia",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "private": true,
   "type": "module",
   "description": "Central operacional inteligente para HBR Systems / HBR Marine.",
@@ -11,7 +11,13 @@
     "e2e": "node scripts/e2e-product-test.js",
     "sync": "powershell -ExecutionPolicy Bypass -File scripts/git-sync.ps1"
   },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  },
   "engines": {
     "node": ">=24"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
   }
 }

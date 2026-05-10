@@ -5,6 +5,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
+import webpush from 'web-push';
 import { db, getSetting, migrate, now, parseJson, recordHistory, setSetting, stringifyJson, touch } from './db.js';
 import { createDraft, interpretOperationalBatch, interpretOperationalText } from './ai/interpreter.js';
 
@@ -12,9 +13,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const publicDir = join(rootDir, 'public');
 const PORT = Number(process.env.PORT || 4173);
-const APP_VERSION = '0.3.11';
+const APP_VERSION = '0.3.12';
 
 migrate();
+
+function vapidConfig() {
+  const existing = getSetting('vapid_keys', null);
+  if (existing?.publicKey && existing?.privateKey) return existing;
+  const generated = webpush.generateVAPIDKeys();
+  setSetting('vapid_keys', generated);
+  return generated;
+}
+
+const vapidKeys = vapidConfig();
+webpush.setVapidDetails('mailto:operacao@hbrsystems.local', vapidKeys.publicKey, vapidKeys.privateKey);
 
 const jsonFields = new Set(['tags', 'checklist', 'subtasks', 'attachments', 'links', 'installed_systems', 'materials']);
 const defaultSettings = {
@@ -52,7 +64,16 @@ const defaultSettings = {
     whatsapp: 'planejada',
     spreadsheets: 'planejada',
     erp_crm: 'futuro'
-  }
+  },
+  notifications_enabled: true,
+  push_enabled: true,
+  notify_due_today: true,
+  notify_overdue: true,
+  notify_follow_up: true,
+  notify_blockers: true,
+  notify_ai_approvals: true,
+  notify_timer_checks: true,
+  notification_sweep_minutes: 5
 };
 
 const entityConfig = {
@@ -351,7 +372,16 @@ function cleanSettings(payload) {
       ? payload.additional_categories.map((item) => String(item).trim()).filter(Boolean)
       : parseJson(payload.additional_categories, current.additional_categories || []),
     custom_status_notes: String(payload.custom_status_notes ?? current.custom_status_notes).trim(),
-    integrations
+    integrations,
+    notifications_enabled: Boolean(payload.notifications_enabled),
+    push_enabled: Boolean(payload.push_enabled),
+    notify_due_today: Boolean(payload.notify_due_today),
+    notify_overdue: Boolean(payload.notify_overdue),
+    notify_follow_up: Boolean(payload.notify_follow_up),
+    notify_blockers: Boolean(payload.notify_blockers),
+    notify_ai_approvals: Boolean(payload.notify_ai_approvals),
+    notify_timer_checks: Boolean(payload.notify_timer_checks),
+    notification_sweep_minutes: clampNumber(payload.notification_sweep_minutes, 1, 120, current.notification_sweep_minutes || 5)
   };
 }
 
@@ -903,6 +933,223 @@ function agentProactiveState() {
     flows,
     can_autonomously_create_internal_records: Boolean(settings.agent_autonomous_internal_actions)
   };
+}
+
+function pushStatusForUser(userId) {
+  const subscriptions = db.prepare(`
+    SELECT id, platform, browser, enabled, last_success_at, last_error, updated_at
+    FROM push_subscriptions
+    WHERE user_id = ?
+    ORDER BY updated_at DESC
+  `).all(userId).map((row) => ({ ...row, enabled: Boolean(row.enabled) }));
+  return {
+    publicKey: vapidKeys.publicKey,
+    subscriptions,
+    serverEnabled: Boolean(operationalSettings().push_enabled),
+    supportsBackgroundPush: true
+  };
+}
+
+function savePushSubscription(payload, userId) {
+  if (!payload?.subscription?.endpoint) throw Object.assign(new Error('Assinatura push invalida.'), { status: 400 });
+  const subscriptionJson = JSON.stringify(payload.subscription);
+  const platform = String(payload.platform || '').slice(0, 80);
+  const browser = String(payload.browser || '').slice(0, 80);
+  const userAgent = String(payload.userAgent || '').slice(0, 500);
+  db.prepare(`
+    INSERT INTO push_subscriptions (user_id, endpoint, subscription_json, platform, browser, user_agent, enabled, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+    ON CONFLICT(endpoint) DO UPDATE SET
+      user_id = excluded.user_id,
+      subscription_json = excluded.subscription_json,
+      platform = excluded.platform,
+      browser = excluded.browser,
+      user_agent = excluded.user_agent,
+      enabled = 1,
+      last_error = NULL,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(userId, payload.subscription.endpoint, subscriptionJson, platform, browser, userAgent);
+  recordHistory('push_subscriptions', userId, 'push_assinado', { platform, browser }, userId);
+  return pushStatusForUser(userId);
+}
+
+function disablePushSubscription(endpoint, userId, error = '') {
+  if (!endpoint) return;
+  db.prepare(`
+    UPDATE push_subscriptions
+    SET enabled = 0, last_error = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE endpoint = ? AND user_id = ?
+  `).run(String(error).slice(0, 300), endpoint, userId);
+}
+
+async function sendPushToRows(rows, notification) {
+  const settings = operationalSettings();
+  if (!settings.notifications_enabled || !settings.push_enabled) return { sent: 0, failed: 0, skipped: rows.length };
+  let sent = 0;
+  let failed = 0;
+  await Promise.all(rows.map(async (row) => {
+    try {
+      await webpush.sendNotification(JSON.parse(row.subscription_json), JSON.stringify(notification));
+      db.prepare('UPDATE push_subscriptions SET last_success_at = CURRENT_TIMESTAMP, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      const statusCode = Number(error.statusCode || 0);
+      if ([404, 410].includes(statusCode)) {
+        db.prepare('UPDATE push_subscriptions SET enabled = 0, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(String(error.message).slice(0, 300), row.id);
+      } else {
+        db.prepare('UPDATE push_subscriptions SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(String(error.message).slice(0, 300), row.id);
+      }
+    }
+  }));
+  return { sent, failed, skipped: 0 };
+}
+
+async function sendPushToUser(userId, notification) {
+  const rows = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ? AND enabled = 1').all(userId);
+  return sendPushToRows(rows, notification);
+}
+
+function activePushSubscriptions() {
+  return db.prepare('SELECT * FROM push_subscriptions WHERE enabled = 1').all();
+}
+
+function dedupeNotification(key, type, entityType, entityId, title, body, payload = {}) {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO notification_events (dedupe_key, type, entity_type, entity_id, title, body, payload)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(key, type, entityType, entityId, title, body, JSON.stringify(payload));
+  return result.changes > 0;
+}
+
+function notificationCandidates() {
+  const settings = operationalSettings();
+  if (!settings.notifications_enabled) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  const nowIso = new Date().toISOString();
+  const tasks = listEntities('tasks', new URL('http://local/api/tasks'))
+    .filter((task) => !['concluido', 'cancelado', 'arquivado'].includes(task.status));
+  const items = [];
+  for (const task of tasks) {
+    const basePayload = { url: `/?view=tasks&task=${task.id}`, taskId: task.id, type: 'task' };
+    if (settings.notify_overdue && task.due_date && task.due_date < today) {
+      items.push({
+        key: `overdue:${task.id}:${task.due_date}`,
+        type: 'overdue',
+        entityType: 'tasks',
+        entityId: task.id,
+        title: 'Tarefa atrasada',
+        body: `${task.title} venceu em ${task.due_date}.`,
+        payload: basePayload
+      });
+    }
+    if (settings.notify_due_today && task.due_date === today && ['alta', 'critica'].includes(task.priority)) {
+      items.push({
+        key: `due-today:${task.id}:${today}`,
+        type: 'due_today',
+        entityType: 'tasks',
+        entityId: task.id,
+        title: 'Prioridade para hoje',
+        body: `${task.title} precisa de atencao hoje.`,
+        payload: basePayload
+      });
+    }
+    if (settings.notify_follow_up && task.follow_up_at && task.follow_up_at <= nowIso) {
+      items.push({
+        key: `follow-up:${task.id}:${String(task.follow_up_at).slice(0, 16)}`,
+        type: 'follow_up',
+        entityType: 'tasks',
+        entityId: task.id,
+        title: 'Follow-up pendente',
+        body: `${task.title} tem follow-up programado.`,
+        payload: basePayload
+      });
+    }
+    if (settings.notify_blockers && ['aguardando_cliente', 'aguardando_fornecedor', 'aguardando_aprovacao', 'aguardando_material'].includes(task.status)) {
+      const updatedDay = String(task.updated_at || '').slice(0, 10);
+      if (updatedDay && updatedDay < today) {
+        items.push({
+          key: `blocked:${task.id}:${today}`,
+          type: 'blocked',
+          entityType: 'tasks',
+          entityId: task.id,
+          title: 'Tarefa parada aguardando retorno',
+          body: `${task.title} esta em ${taskStatusesServer(task.status)}.`,
+          payload: basePayload
+        });
+      }
+    }
+    if (settings.notify_timer_checks && task.timer_running && task.last_timer_check_at) {
+      const checkMinutes = clampNumber(settings.timer_check_minutes, 1, 60, 5);
+      const elapsed = Date.now() - new Date(task.last_timer_check_at).getTime();
+      if (Number.isFinite(elapsed) && elapsed >= checkMinutes * 60 * 1000) {
+        items.push({
+          key: `timer:${task.id}:${Math.floor(Date.now() / (checkMinutes * 60 * 1000))}`,
+          type: 'timer_check',
+          entityType: 'tasks',
+          entityId: task.id,
+          title: 'Confirmar tarefa em andamento',
+          body: `O timer de ${task.title} precisa de confirmacao.`,
+          payload: { ...basePayload, requireInteraction: true }
+        });
+      }
+    }
+  }
+  if (settings.notify_ai_approvals) {
+    const pending = db.prepare("SELECT * FROM ai_actions WHERE status = 'aguardando_revisao' ORDER BY created_at DESC LIMIT 8").all();
+    for (const action of pending) {
+      items.push({
+        key: `ai-approval:${action.id}`,
+        type: 'ai_approval',
+        entityType: 'ai_actions',
+        entityId: action.id,
+        title: 'Acao da IA aguardando revisao',
+        body: action.title,
+        payload: { url: '/?view=ai', actionId: action.id, type: 'ai_approval' }
+      });
+    }
+  }
+  return items;
+}
+
+function taskStatusesServer(status) {
+  const labels = {
+    aguardando_cliente: 'aguardando cliente',
+    aguardando_fornecedor: 'aguardando fornecedor',
+    aguardando_aprovacao: 'aguardando aprovacao',
+    aguardando_material: 'aguardando material'
+  };
+  return labels[status] || status;
+}
+
+async function runNotificationSweep() {
+  const rows = activePushSubscriptions();
+  if (!rows.length) return { sent: 0, failed: 0, skipped: 0, candidates: 0 };
+  const candidates = notificationCandidates().filter((item) => dedupeNotification(item.key, item.type, item.entityType, item.entityId, item.title, item.body, item.payload));
+  let sent = 0;
+  let failed = 0;
+  for (const item of candidates) {
+    const result = await sendPushToRows(rows, {
+      title: item.title,
+      body: item.body,
+      tag: item.key,
+      data: item.payload,
+      requireInteraction: Boolean(item.payload?.requireInteraction)
+    });
+    sent += result.sent;
+    failed += result.failed;
+  }
+  return { sent, failed, skipped: 0, candidates: candidates.length };
+}
+
+let lastNotificationSweepAt = 0;
+
+async function runScheduledNotificationSweep() {
+  const settings = operationalSettings();
+  const intervalMs = clampNumber(settings.notification_sweep_minutes, 1, 120, 5) * 60 * 1000;
+  if (Date.now() - lastNotificationSweepAt < intervalMs) return;
+  lastNotificationSweepAt = Date.now();
+  await runNotificationSweep();
 }
 
 function buildAgentPatterns(tasks) {
@@ -1566,6 +1813,37 @@ async function api(req, res, url) {
     return json(res, 200, settings);
   }
 
+  if (url.pathname === '/api/push/status' && req.method === 'GET') {
+    return json(res, 200, pushStatusForUser(session.id));
+  }
+
+  if (url.pathname === '/api/push/subscribe' && req.method === 'POST') {
+    return json(res, 201, savePushSubscription(await readBody(req), session.id));
+  }
+
+  if (url.pathname === '/api/push/unsubscribe' && req.method === 'POST') {
+    const body = await readBody(req);
+    disablePushSubscription(body.endpoint, session.id, 'Cancelado pelo usuario.');
+    return json(res, 200, pushStatusForUser(session.id));
+  }
+
+  if (url.pathname === '/api/push/test' && req.method === 'POST') {
+    const body = await readBody(req);
+    const result = await sendPushToUser(session.id, {
+      title: body.title || 'HBR Operacional IA',
+      body: body.body || 'Notificacao de teste funcionando neste dispositivo.',
+      tag: `test:${session.id}:${Date.now()}`,
+      data: { url: '/', type: 'test' }
+    });
+    recordHistory('push_subscriptions', session.id, 'push_teste', result, session.id);
+    return json(res, 200, result);
+  }
+
+  if (url.pathname === '/api/push/sweep' && req.method === 'POST') {
+    const result = await runNotificationSweep();
+    return json(res, 200, result);
+  }
+
   if (url.pathname === '/api/saved-views' && req.method === 'GET') {
     return json(res, 200, savedViews(url.searchParams.get('scope') || 'tasks'));
   }
@@ -1787,6 +2065,8 @@ const mime = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.png': 'image/png',
   '.svg': 'image/svg+xml'
 };
 
@@ -1803,6 +2083,10 @@ async function staticFile(req, res, url) {
   res.writeHead(200, { 'Content-Type': mime[extname(filePath)] || 'application/octet-stream' });
   res.end(buffer);
 }
+
+setInterval(() => {
+  runScheduledNotificationSweep().catch((error) => console.error('Falha no sweep de notificacoes', error));
+}, 60 * 1000);
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);

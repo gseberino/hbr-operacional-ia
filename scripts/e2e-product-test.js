@@ -479,19 +479,28 @@ try {
   assert(dashboard.data.counts.tasks >= 5, 'Dashboard nao refletiu tarefas criadas.');
 
   const appJs = await textRequest('/app.js');
-  const frontendText = `${appJs}\n${await textRequest('/styles.css')}`;
+  const serviceWorker = await textRequest('/service-worker.js');
+  const manifest = await textRequest('/manifest.webmanifest');
+  const pushStatus = await request('/api/push/status', { headers: { Cookie: cookie } });
+  const pushSweep = await request('/api/push/sweep', { method: 'POST', headers: { Cookie: cookie } });
+  assert(pushStatus.data.publicKey, 'Chave publica VAPID nao foi exposta para assinatura push.');
+  assert(Number.isFinite(pushSweep.data.sent), 'Varredura de notificacoes nao retornou resultado valido.');
+  const frontendText = `${appJs}\n${await textRequest('/styles.css')}\n${serviceWorker}\n${manifest}`;
   for (const expected of ['Mais acoes', 'top-action-menu', 'Copiar p/ grupo', 'Copiar relatorio', 'Relatorio PDF', 'Agenda PDF', 'Kanban PDF', 'Rendimento do dia', 'Carga por responsavel', 'Filtros', 'filter_responsible', 'filter_kanban_group', 'filter_planning_view', 'filter_saved_view_id', 'Salvar view atual', 'Filtros avancados', 'Area de trabalho', 'data-task-tab', 'Central de Planejamento', 'planning-board', 'Por responsavel', 'Responsaveis', 'Periodos do dia', 'Meta diaria de tarefas', 'Analise operacional', 'Plano do dia', 'Preencher com modelo', 'data-template-select', 'Resumo dos vinculos', 'Modelos de preenchimento de tarefa', 'drawer-tabs', 'settings-tabs', 'data-settings-tab', 'system-subtabs', 'data-settings-system-tab', 'Empresa', 'Sistema', 'Integracoes', 'Benchmark', 'Prazo e importancia', 'Contexto e bloqueios', 'Adicionar checklist', 'Ferramentas da tarefa', 'Comentarios, dependencias e historico', 'Buscar na tabela', 'entity-spreadsheet', 'Campos complementares', 'Mais dados', 'Campos customizados', 'Automacoes internas', 'Score operacional', 'data-kanban-status', 'data-kanban-responsible', 'data-edit-task', 'data-drawer-draft-email', 'data-drawer-draft-whatsapp', 'data-drawer-timer-start', 'data-drawer-timer-pause', 'Conferir timer a cada', 'Como o Agente IA trabalha', 'settingsForm', 'Passo do score', 'Passo do esforço', 'Salvar configuracoes']) {
     assert(frontendText.includes(expected), `Frontend nao contem controle esperado: ${expected}`);
   }
   for (const expected of ['Colaborador IA 24h', 'agentChatForm', 'data-agent-chat-form', 'floating-agent', 'Chat IA suspenso', 'agentDismissedQuestionId', 'data-agent-choice', 'data-agent-autosend', 'requestSubmit', 'resize: both', 'Chat operacional', 'Revisao e rascunhos', 'data-ai-tab', 'Planejamento e execucao', 'agent_idle_minutes', 'Ativar colaborador IA proativo', 'Agenda semanal de demandas HBR', 'agenda-week-grid', 'Manha', 'Tarde']) {
     assert(frontendText.includes(expected), `Frontend nao contem controle esperado do agente: ${expected}`);
   }
+  for (const expected of ['manifest.webmanifest', 'service-worker.js', 'subscribePushNotifications', 'PWA e notificacoes globais', 'Web Push disponivel', 'HBR_SHOW_NOTIFICATION', 'pushManager.subscribe', 'notificationclick', 'CACHE_NAME', 'notify_due_today', 'notify_overdue', 'notify_follow_up', 'notify_blockers', 'notify_ai_approvals', 'notify_timer_checks']) {
+    assert(frontendText.includes(expected), `PWA/WebPush nao contem controle esperado: ${expected}`);
+  }
   for (const removed of ['data-score-task', 'data-effort-task', 'data-quick-field', 'data-timer-start', 'data-timer-pause']) {
     assert(!frontendText.includes(removed), `Controle rapido antigo ainda esta poluindo os blocos: ${removed}`);
   }
-  assert(appJs.includes("const appVersion = '0.3.11'"), 'Versao visivel do app nao foi atualizada.');
+  assert(appJs.includes("const appVersion = '0.3.12'"), 'Versao visivel do app nao foi atualizada.');
   const version = await request('/api/app-version', { headers: { Cookie: cookie } });
-  assert(version.data.version === '0.3.11', 'Backend nao reportou versao 0.3.11.');
+  assert(version.data.version === '0.3.12', 'Backend nao reportou versao 0.3.12.');
 
   console.log(JSON.stringify({
     status: 'E2E OK',

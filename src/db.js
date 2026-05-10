@@ -278,6 +278,33 @@ export function migrate() {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      subscription_json TEXT NOT NULL,
+      platform TEXT DEFAULT '',
+      browser TEXT DEFAULT '',
+      user_agent TEXT DEFAULT '',
+      enabled INTEGER DEFAULT 1,
+      last_success_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id INTEGER,
+      title TEXT NOT NULL,
+      body TEXT,
+      payload TEXT DEFAULT '{}',
+      sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   ensureColumn('clients', 'data_status', "TEXT DEFAULT 'completo'");
@@ -379,7 +406,16 @@ function defaultOperationalSettings() {
       whatsapp: 'planejada',
       spreadsheets: 'planejada',
       erp_crm: 'futuro'
-    }
+    },
+    notifications_enabled: true,
+    push_enabled: true,
+    notify_due_today: true,
+    notify_overdue: true,
+    notify_follow_up: true,
+    notify_blockers: true,
+    notify_ai_approvals: true,
+    notify_timer_checks: true,
+    notification_sweep_minutes: 5
   };
 }
 
