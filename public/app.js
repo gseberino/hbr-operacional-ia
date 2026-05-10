@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const appVersion = '0.3.10';
+const appVersion = '0.3.11';
 // Marcadores de compatibilidade dos testes: Como o Agente IA trabalha | Passo do esforÃ§o.
 
 const state = {
@@ -72,15 +72,15 @@ const labels = {
 };
 
 const navItems = [
-  ['dashboard', 'D', 'Dashboard'],
-  ['intake', 'I', 'Caixa inteligente'],
-  ['tasks', 'T', 'Tarefas'],
-  ['clients', 'C', 'Clientes'],
-  ['assets', 'A', 'Ativos'],
-  ['projects', 'O', 'Projetos / OS'],
-  ['documents', 'F', 'Documentos'],
-  ['ai', 'R', 'Agente IA'],
-  ['settings', 'S', 'Configuracoes']
+  ['dashboard', 'Dashboard'],
+  ['intake', 'Caixa inteligente'],
+  ['tasks', 'Tarefas'],
+  ['clients', 'Clientes'],
+  ['assets', 'Ativos'],
+  ['projects', 'Projetos / OS'],
+  ['documents', 'Documentos'],
+  ['ai', 'Agente IA'],
+  ['settings', 'Configuracoes']
 ];
 
 const taskStatuses = [
@@ -390,9 +390,9 @@ function renderApp() {
           <span>Operacao tecnica assistida</span>
         </div>
         <nav class="nav">
-          ${navItems.map(([key, icon, label]) => `
+          ${navItems.map(([key, label]) => `
             <button class="${state.view === key ? 'active' : ''}" data-view="${key}" title="${label}">
-              <span>${icon}</span><span>${label}</span>
+              <span class="nav-icon" aria-hidden="true">${navIcon(key)}</span><span>${label}</span>
             </button>
           `).join('')}
         </nav>
@@ -433,6 +433,21 @@ function renderCompatibilityBanner() {
       <span>O frontend carregou a versao ${appVersion}, mas o backend ativo nao confirmou a mesma versao. Feche o processo antigo da porta 4173 e rode npm.cmd start novamente para ativar templates, automacoes, views salvas e comentarios.</span>
     </div>
   `;
+}
+
+function navIcon(key) {
+  const icons = {
+    dashboard: '<path d="M4 13h6V4H4v9Zm10 7h6V4h-6v16ZM4 20h6v-5H4v5Z"/>',
+    intake: '<path d="M5 4h14v16H5V4Zm3 4h8M8 12h8M8 16h5"/>',
+    tasks: '<path d="M5 6h14M5 12h14M5 18h14M4 6h.01M4 12h.01M4 18h.01"/>',
+    clients: '<path d="M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 20a8 8 0 0 1 16 0"/>',
+    assets: '<path d="M4 15c3 2 13 2 16 0l-2 4H6l-2-4Zm2-1 3-6h6l3 6M9 8V5h6v3"/>',
+    projects: '<path d="M4 7h16v13H4V7Zm3 0V4h10v3M8 12h8M8 16h5"/>',
+    documents: '<path d="M7 3h7l5 5v13H7V3Zm7 0v6h5M10 13h6M10 17h6"/>',
+    ai: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M7 7l-2-2M17 7l2-2M7 17l-2 2M17 17l2 2M8 8h8v8H8V8Z"/>',
+    settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-5 1.5 3 3.3.5-2.4 2.3.6 3.2-3-1.6-3 1.6.6-3.2-2.4-2.3 3.3-.5L12 3Z"/>'
+  };
+  return `<svg viewBox="0 0 24 24" role="img" focusable="false">${icons[key] || icons.dashboard}</svg>`;
 }
 
 function renderFloatingAgent() {
@@ -489,18 +504,15 @@ function topActions() {
   if (state.view === 'tasks') {
     return `
       <button class="btn primary" data-action="new-task">Nova tarefa</button>
-      <details class="top-action-menu">
-        <summary class="btn">Mais acoes</summary>
-        <div>
-          <button class="btn small" data-export="tasks-text">Copiar p/ grupo</button>
-          <button class="btn small" data-export="tasks-report">Copiar relatorio</button>
-          <button class="btn small" data-export="tasks-operational-pdf">Relatorio PDF</button>
-          <button class="btn small" data-export="tasks-agenda">Agenda PDF</button>
-          <button class="btn small" data-export="tasks-kanban">Kanban PDF</button>
-          <button class="btn small" data-export="csv">CSV</button>
-          <button class="btn small" data-export="json">JSON</button>
-        </div>
-      </details>
+      ${topActionMenu([
+        ['tasks-text', 'Copiar p/ grupo'],
+        ['tasks-report', 'Copiar relatorio'],
+        ['tasks-operational-pdf', 'Relatorio PDF'],
+        ['tasks-agenda', 'Agenda PDF'],
+        ['tasks-kanban', 'Kanban PDF'],
+        ['csv', 'CSV'],
+        ['json', 'JSON']
+      ])}
     `;
   }
   if (state.view === 'clients') return '<button class="btn primary" data-action="new-client">Novo cliente</button>' + exportButtons();
@@ -512,8 +524,21 @@ function topActions() {
 }
 
 function exportButtons(options = {}) {
-  const csv = options.csv !== false ? '<button class="btn" data-export="csv">CSV</button>' : '';
-  return `<button class="btn" data-export="pdf">PDF</button>${csv}<button class="btn" data-export="json">JSON</button>`;
+  const items = [['pdf', 'PDF']];
+  if (options.csv !== false) items.push(['csv', 'CSV']);
+  items.push(['json', 'JSON']);
+  return topActionMenu(items);
+}
+
+function topActionMenu(items) {
+  return `
+    <details class="top-action-menu">
+      <summary class="btn">Mais acoes</summary>
+      <div>
+        ${items.map(([key, label]) => `<button class="btn small" data-export="${key}">${label}</button>`).join('')}
+      </div>
+    </details>
+  `;
 }
 
 function bindNav() {

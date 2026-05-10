@@ -84,6 +84,10 @@ button {
   display: flex;
   flex-direction: column;
   gap: 22px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -118,10 +122,33 @@ button {
   text-align: left;
 }
 
+.nav-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  color: #a7c0c9;
+}
+
+.nav-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .nav button:hover,
 .nav button.active {
   background: rgba(255,255,255,0.10);
   color: #ffffff;
+}
+
+.nav button:hover .nav-icon,
+.nav button.active .nav-icon {
+  color: var(--accent);
 }
 
 .sidebar-footer {
@@ -131,6 +158,9 @@ button {
   padding: 10px;
   color: #a7b8bd;
   font-size: 13px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  background: rgba(13, 27, 42, 0.20);
+  border-radius: 8px;
 }
 
 .main {
@@ -169,6 +199,7 @@ button {
 
 .top-action-menu summary {
   list-style: none;
+  cursor: pointer;
 }
 
 .top-action-menu summary::-webkit-details-marker {
@@ -1286,6 +1317,8 @@ tr:last-child td {
     top: 0;
     z-index: 10;
     padding: 10px;
+    height: auto;
+    overflow: visible;
   }
 
   .brand {

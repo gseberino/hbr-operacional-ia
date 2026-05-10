@@ -489,9 +489,9 @@ try {
   for (const removed of ['data-score-task', 'data-effort-task', 'data-quick-field', 'data-timer-start', 'data-timer-pause']) {
     assert(!frontendText.includes(removed), `Controle rapido antigo ainda esta poluindo os blocos: ${removed}`);
   }
-  assert(appJs.includes("const appVersion = '0.3.10'"), 'Versao visivel do app nao foi atualizada.');
+  assert(appJs.includes("const appVersion = '0.3.11'"), 'Versao visivel do app nao foi atualizada.');
   const version = await request('/api/app-version', { headers: { Cookie: cookie } });
-  assert(version.data.version === '0.3.10', 'Backend nao reportou versao 0.3.10.');
+  assert(version.data.version === '0.3.11', 'Backend nao reportou versao 0.3.11.');
 
   console.log(JSON.stringify({
     status: 'E2E OK',
